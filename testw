@@ -855,6 +855,73 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         if jumpToggle.get()  then hum.JumpPower  = jumpVal  end
     end
 end)
+addSection(tabCom, "NPC Scanner")
+addLabel(tabCom, "Deteta NPCs próximos de forma otimizada")
+
+local scanRange = 15
+local scanActive = false
+local scanConn
+
+local overlapParams = OverlapParams.new()
+overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function scanNearbyNPCs()
+    local hrp = getHRP()
+    if not hrp then return end
+
+    local parts = workspace:GetPartBoundsInRadius(
+        hrp.Position,
+        scanRange,
+        overlapParams
+    )
+
+    local checked = {}
+
+    for _, part in ipairs(parts) do
+        local model = part:FindFirstAncestorOfClass("Model")
+
+        if model and not checked[model] then
+            checked[model] = true
+
+            if not Players:GetPlayerFromCharacter(model) then
+                local hum = model:FindFirstChildOfClass("Humanoid")
+
+                if hum and hum.Health > 0 then
+                    print("NPC encontrado:", model.Name)
+                end
+            end
+        end
+    end
+end
+
+local scanToggle = addToggle(tabCom, "Ativar Scanner", false, function(v)
+    scanActive = v
+
+    if v then
+        if scanConn then
+            scanConn:Disconnect()
+        end
+
+        scanConn = RunService.Heartbeat:Connect(function()
+            if scanActive then
+                pcall(scanNearbyNPCs)
+            end
+        end)
+
+        notify("Scanner", "Scanner ativo")
+    else
+        if scanConn then
+            scanConn:Disconnect()
+            scanConn = nil
+        end
+
+        notify("Scanner", "Scanner desligado")
+    end
+end)
+
+addSlider(tabCom, "Raio Scanner", 5, 80, 15, function(v)
+    scanRange = v
+end)
 
 -- ══════════════════════════════════════════
 --  INICIAR
