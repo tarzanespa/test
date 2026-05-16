@@ -154,7 +154,7 @@ Sep.ZIndex = 11
 Sep.Parent = Window
 
 -- ══════════════════════════════════════════
---  SIDEBAR (tabs)
+--  SIDEBAR
 -- ══════════════════════════════════════════
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0,130,1,-60)
@@ -585,6 +585,13 @@ local function getChar() return LocalPlayer.Character end
 local function getHum()  return getChar() and getChar():FindFirstChildOfClass("Humanoid") end
 local function getHRP()  return getChar() and getChar():FindFirstChild("HumanoidRootPart") end
 
+local function isPlayerCharacter(model)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character == model then return true end
+    end
+    return false
+end
+
 -- ══════════════════════════════════════════
 --  TAB: MOVIMENTO
 -- ══════════════════════════════════════════
@@ -651,38 +658,74 @@ end)
 --  TAB: COMBATE
 -- ══════════════════════════════════════════
 local tabCom = addTab("⚔️ Combate")
-local ikRange = 15
-local ikConn  = nil
-local godConn = nil
+local ikRange  = 15
+local ikActive = false
+local ikConn   = nil
+local godConn  = nil
 
-addSection(tabCom, "Instakill NPCs")
-addLabel(tabCom, "⚠️  Só afeta NPCs/mobs, nunca jogadores")
+-- Função principal de instakill — funciona em NPCs normais E bosses
+local function killNPC(model)
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
 
-local ikToggle = addToggle(tabCom, "Instakill NPCs", false, function(on)
+    -- Método 1: zera HP e MaxHP (impede regen de bosses)
+    hum.Health    = 0
+    hum.MaxHealth = 0
+
+    -- Método 2: força estado de morte
+    pcall(function()
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        hum:ChangeState(Enum.HumanoidStateType.Dead)
+    end)
+
+    -- Método 3: desativa scripts de regen/heal do boss
+    for _, obj in ipairs(model:GetDescendants()) do
+        if obj:IsA("Script") or obj:IsA("LocalScript") then
+            local n = obj.Name:lower()
+            if n:find("regen") or n:find("health") or n:find("heal") or n:find("boss") then
+                pcall(function() obj.Disabled = true end)
+            end
+        end
+    end
+end
+
+local function killNearbyNPCs()
+    local myHRP = getHRP()
+    if not myHRP then return end
+
+    local overlapParams = OverlapParams.new()
+    overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+
+    local parts = workspace:GetPartBoundsInRadius(myHRP.Position, ikRange, overlapParams)
+    local checked = {}
+
+    for _, part in ipairs(parts) do
+        local model = part:FindFirstAncestorOfClass("Model")
+        if model and not checked[model] then
+            checked[model] = true
+            if not isPlayerCharacter(model) then
+                pcall(killNPC, model)
+            end
+        end
+    end
+end
+
+addSection(tabCom, "Instakill NPCs & Bosses")
+addLabel(tabCom, "⚠️  Só afeta NPCs/bosses, nunca jogadores")
+
+local ikToggle = addToggle(tabCom, "Instakill NPCs & Bosses", false, function(on)
+    ikActive = on
     if on then
-        ikConn = RunService.Heartbeat:Connect(function()
-            local myHRP = getHRP()
-            if not myHRP then return end
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("Humanoid") and obj.Health > 0 then
-                    local char = obj.Parent
-                    local isPlayer = false
-                    for _, p in ipairs(Players:GetPlayers()) do
-                        if p.Character == char then isPlayer=true break end
-                    end
-                    if not isPlayer then
-                        local hrp = char:FindFirstChild("HumanoidRootPart")
-                        if hrp and (hrp.Position - myHRP.Position).Magnitude <= ikRange then
-                            obj.Health = 0
-                        end
-                    end
-                end
+        task.spawn(function()
+            while ikActive do
+                local ok, err = pcall(killNearbyNPCs)
+                if not ok then warn("[IK] "..tostring(err)) end
+                task.wait(0.1)
             end
         end)
-        notify("Instakill NPCs", "Ativo  •  Raio: "..ikRange.." studs")
+        notify("Instakill", "Ativo  •  Raio: "..ikRange.." studs")
     else
-        if ikConn then ikConn:Disconnect() ikConn=nil end
-        notify("Instakill NPCs", "Desativado")
+        notify("Instakill", "Desativado")
     end
 end)
 
@@ -716,7 +759,7 @@ end)
 local tabVis = addTab("👁️ Visual")
 local espConns = {}
 
-addSection(tabVis, "ESP — NPCs")
+addSection(tabVis, "ESP — NPCs & Bosses")
 
 addToggle(tabVis, "ESP NPCs (nomes)", false, function(on)
     for _, c in ipairs(espConns) do c:Disconnect() end
@@ -726,17 +769,16 @@ addToggle(tabVis, "ESP NPCs (nomes)", false, function(on)
         local function applyESP(model)
             if not model:IsA("Model") then return end
             if not model:FindFirstChildOfClass("Humanoid") then return end
-            local isPlayer = false
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p.Character == model then isPlayer=true break end
-            end
-            if isPlayer then return end
+            if isPlayerCharacter(model) then return end
             local hrp = model:FindFirstChild("HumanoidRootPart")
             if not hrp or hrp:FindFirstChild("ESP_Tag") then return end
 
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local isBoss = hum and hum.MaxHealth >= 500
+
             local bb = Instance.new("BillboardGui")
             bb.Name = "ESP_Tag"
-            bb.Size = UDim2.new(0,100,0,30)
+            bb.Size = UDim2.new(0,120,0,34)
             bb.StudsOffset = Vector3.new(0,3,0)
             bb.AlwaysOnTop = true
             bb.Parent = hrp
@@ -744,17 +786,18 @@ addToggle(tabVis, "ESP NPCs (nomes)", false, function(on)
             local tl = Instance.new("TextLabel")
             tl.Size = UDim2.new(1,0,1,0)
             tl.BackgroundTransparency = 1
-            tl.Text = "⚠ "..model.Name
-            tl.TextSize = 12
+            tl.Text = (isBoss and "👑 BOSS  " or "⚠ ") .. model.Name
+            tl.TextSize = isBoss and 14 or 12
             tl.Font = Enum.Font.GothamBold
-            tl.TextColor3 = Color3.fromRGB(255,80,80)
+            tl.TextColor3 = isBoss and Color3.fromRGB(255,200,0) or Color3.fromRGB(255,80,80)
             tl.TextStrokeTransparency = 0
             tl.Parent = bb
         end
+
         for _, obj in ipairs(workspace:GetDescendants()) do applyESP(obj) end
         local c = workspace.DescendantAdded:Connect(function(d) task.wait() applyESP(d) end)
         table.insert(espConns, c)
-        notify("ESP", "Ativo — NPCs marcados em vermelho")
+        notify("ESP", "Ativo — Bosses em amarelo, NPCs em vermelho")
     else
         for _, obj in ipairs(workspace:GetDescendants()) do
             local tag = obj:FindFirstChild("ESP_Tag")
@@ -816,5 +859,5 @@ end)
 -- ══════════════════════════════════════════
 --  INICIAR
 -- ══════════════════════════════════════════
-notify("Menu Universal", "Carregado com sucesso!  •  RightShift para abrir")
+notify("Menu Universal", "Carregado!  •  RightShift para abrir/fechar")
 toggleMenu()
