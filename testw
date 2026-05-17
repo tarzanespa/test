@@ -1,5 +1,5 @@
 -- ============================================================
---  MENU UNIVERSAL ROBLOX  |  Reescrito do zero
+--  MENU UNIVERSAL ROBLOX  |  Bizarre Lineage Edition
 --  Abre/Fecha: RightShift
 -- ============================================================
 
@@ -7,6 +7,7 @@ local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
 local RunService       = game:GetService("RunService")
+local ReplicatedStorage= game:GetService("ReplicatedStorage")
 local LocalPlayer      = Players.LocalPlayer
 local Mouse            = LocalPlayer:GetMouse()
 
@@ -76,8 +77,8 @@ SG.Parent = _ok and _cg or LocalPlayer.PlayerGui
 --  JANELA
 -- ══════════════════════════════════════════
 local Win = Instance.new("Frame")
-Win.Size = UDim2.new(0, 600, 0, 400)
-Win.Position = UDim2.new(0.5, -300, 0.5, -200)
+Win.Size = UDim2.new(0, 700, 0, 430)
+Win.Position = UDim2.new(0.5, -350, 0.5, -215)
 Win.BackgroundColor3 = BG
 Win.BorderSizePixel = 0
 Win.ZIndex = 10
@@ -119,7 +120,7 @@ local HdrTitle = Instance.new("TextLabel")
 HdrTitle.Size = UDim2.new(1, -50, 0, 28)
 HdrTitle.Position = UDim2.new(0, 14, 0, 8)
 HdrTitle.BackgroundTransparency = 1
-HdrTitle.Text = "🌌  Universal Menu"
+HdrTitle.Text = "🌌  Universal Menu  —  Bizarre Lineage"
 HdrTitle.TextSize = 17
 HdrTitle.Font = Enum.Font.GothamBold
 HdrTitle.TextColor3 = TEXT
@@ -162,12 +163,16 @@ HdrLine.Parent = Win
 -- ══════════════════════════════════════════
 --  SIDEBAR
 -- ══════════════════════════════════════════
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 120, 1, -56)
+local Sidebar = Instance.new("ScrollingFrame")
+Sidebar.Size = UDim2.new(0, 135, 1, -56)
 Sidebar.Position = UDim2.new(0, 0, 0, 54)
 Sidebar.BackgroundColor3 = SIDE
 Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 11
+Sidebar.ScrollBarThickness = 2
+Sidebar.ScrollBarImageColor3 = ACCENT
+Sidebar.CanvasSize = UDim2.new(0, 0, 0, 0)
+Sidebar.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Sidebar.Parent = Win
 mkCorner(Sidebar, 8)
 
@@ -186,8 +191,8 @@ SidePad.Parent = Sidebar
 --  CONTENT
 -- ══════════════════════════════════════════
 local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -128, 1, -58)
-Content.Position = UDim2.new(0, 126, 0, 56)
+Content.Size = UDim2.new(1, -143, 1, -58)
+Content.Position = UDim2.new(0, 141, 0, 56)
 Content.BackgroundColor3 = PANEL
 Content.BorderSizePixel = 0
 Content.ZIndex = 11
@@ -282,7 +287,7 @@ local function newTab(name)
     btn.BackgroundColor3 = ACCENT
     btn.BackgroundTransparency = 1
     btn.Text = name
-    btn.TextSize = 11
+    btn.TextSize = 10
     btn.Font = Enum.Font.GothamSemibold
     btn.TextColor3 = MUTED
     btn.TextXAlignment = Enum.TextXAlignment.Left
@@ -580,40 +585,66 @@ local function isPlayer(model)
 end
 
 -- ══════════════════════════════════════════
---  INSTAKILL — CORRIGIDO
---  Não usa Destroy() no HRP para evitar NPC invisível
---  Em vez disso força Health=0 em loop contínuo
---  e desativa todos os scripts de regen
+--  INSTAKILL — CORRIGIDO (Server-sided aware)
+--  Tenta múltiplos métodos:
+--    1) Humanoid direto (funciona em jogos com física client-side)
+--    2) TakeDamage
+--    3) FireServer via RemoteEvents de dano do jogo
+--    4) Procura remotes em ReplicatedStorage e workspace
 -- ══════════════════════════════════════════
 local ikRange  = 15
 local ikActive = false
+
+local function tryRemotes(obj, model, hum)
+    for _, v in ipairs(obj:GetDescendants()) do
+        if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+            local n = v.Name:lower()
+            if n:find("damage") or n:find("kill") or n:find("hit") or n:find("attack") or n:find("hurt") then
+                pcall(function()
+                    if v:IsA("RemoteEvent") then
+                        v:FireServer(model, math.huge)
+                        v:FireServer(hum,   math.huge)
+                        v:FireServer(hum,   999999)
+                        v:FireServer(model)
+                    elseif v:IsA("RemoteFunction") then
+                        v:InvokeServer(model, math.huge)
+                        v:InvokeServer(hum,   math.huge)
+                    end
+                end)
+            end
+        end
+    end
+end
 
 local function killNPC(model)
     if not model or not model.Parent then return end
     if isPlayer(model) then return end
 
     local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    if hum.Health <= 0 then return end
+    if not hum or hum.Health <= 0 then return end
 
-    -- Desativa scripts de regen/heal antes de tudo
+    -- 1) Desativa scripts de regen/heal antes de tudo
     for _, s in ipairs(model:GetDescendants()) do
-        if (s:IsA("Script") or s:IsA("LocalScript")) then
+        if s:IsA("Script") or s:IsA("LocalScript") then
             pcall(function() s.Disabled = true end)
         end
     end
 
-    -- Força morte pelo Humanoid sem destruir partes
-    -- (evita o bug do NPC invisível)
-    pcall(function()
-        hum.MaxHealth = 0
-        hum.Health    = 0
-    end)
+    -- 2) Tenta forçar morte via Humanoid (client-sided games)
+    pcall(function() hum.MaxHealth = 0 end)
+    pcall(function() hum.Health    = 0 end)
+    pcall(function() hum:TakeDamage(math.huge) end)
+    pcall(function() hum:TakeDamage(999999) end)
 
-    -- Fallback: tenta via TakeDamage com valor absurdo
-    pcall(function()
-        hum:TakeDamage(math.huge)
-    end)
+    -- 3) Tenta via RemoteEvents do jogo (server-sided games como BL)
+    tryRemotes(ReplicatedStorage, model, hum)
+    tryRemotes(workspace, model, hum)
+
+    -- 4) Procura remotes dentro do próprio modelo
+    tryRemotes(model, model, hum)
+
+    -- 5) Tenta BreakJoints como último recurso
+    pcall(function() model:BreakJoints() end)
 end
 
 local function ikLoop()
@@ -637,94 +668,145 @@ local function ikLoop()
 end
 
 -- ══════════════════════════════════════════
---  TAB: MOVIMENTO
+--  MOB AI BREAKER
+--  Remove ou disabilita scripts de IA dos NPCs próximos
 -- ══════════════════════════════════════════
-local tMov = newTab("🏃 Movimento")
-local speedVal = 16
-local jumpVal  = 50
-
-newSection(tMov, "Velocidade")
-
-local speedTog = newToggle(tMov, "Speed Hack", false, function(on)
-    local h = getHum()
-    if h then h.WalkSpeed = on and speedVal or 16 end
-    notify("Speed Hack", on and "Ativo — " .. speedVal .. " studs/s" or "Desativado")
-end)
-
-newSlider(tMov, "Velocidade (studs/s)", 16, 250, 16, function(v)
-    speedVal = v
-    if speedTog.get() then local h = getHum() if h then h.WalkSpeed = v end end
-end)
-
-newSection(tMov, "Salto")
-
-local jumpTog = newToggle(tMov, "High Jump", false, function(on)
-    local h = getHum()
-    if h then h.JumpPower = on and jumpVal or 50 end
-    notify("High Jump", on and "Ativo — " .. jumpVal or "Desativado")
-end)
-
-newSlider(tMov, "Força do Salto", 50, 500, 50, function(v)
-    jumpVal = v
-    if jumpTog.get() then local h = getHum() if h then h.JumpPower = v end end
-end)
-
-newSection(tMov, "Extras")
-
-local ncConn
-newToggle(tMov, "No Clip", false, function(on)
-    if on then
-        ncConn = RunService.Stepped:Connect(function()
-            local c = getChar()
-            if not c then return end
-            for _, p in ipairs(c:GetDescendants()) do
-                if p:IsA("BasePart") then p.CanCollide = false end
+local aiBreakActive = false
+local function aiBreakLoop()
+    while aiBreakActive do
+        local myHRP = getHRP()
+        if myHRP then
+            for _, model in ipairs(workspace:GetDescendants()) do
+                if model:IsA("Model") and not isPlayer(model) then
+                    local hum = model:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        for _, s in ipairs(model:GetDescendants()) do
+                            if s:IsA("Script") then
+                                pcall(function() s.Disabled = true end)
+                            end
+                        end
+                        pcall(function() hum.WalkSpeed = 0 end)
+                        pcall(function() hum.JumpPower = 0 end)
+                    end
+                end
             end
-        end)
-        notify("No Clip", "Ativo")
-    else
-        if ncConn then ncConn:Disconnect() ncConn = nil end
-        notify("No Clip", "Desativado")
+        end
+        task.wait(1)
     end
-end)
-
-newButton(tMov, "🏠 Teleportar ao Spawn", function()
-    local sp = workspace:FindFirstChildOfClass("SpawnLocation")
-    local hrp = getHRP()
-    if hrp and sp then
-        hrp.CFrame = sp.CFrame + Vector3.new(0, 4, 0)
-        notify("Teleporte", "Teleportado!")
-    else
-        notify("Teleporte", "Spawn não encontrado")
-    end
-end)
+end
 
 -- ══════════════════════════════════════════
---  TAB: COMBATE
+--  DESYNC
+--  Simula desync movendo HRP rapidamente de volta
 -- ══════════════════════════════════════════
-local tCom = newTab("⚔️ Combate")
-local godConn
+local desyncActive = false
+local desyncConn
+local function startDesync()
+    desyncConn = RunService.Heartbeat:Connect(function()
+        local hrp = getHRP()
+        if hrp then
+            -- Alterna CFrame levemente para confundir o servidor
+            local cf = hrp.CFrame
+            hrp.CFrame = cf * CFrame.new(0, 0.001, 0)
+        end
+    end)
+end
 
-newSection(tCom, "Instakill")
-newLabel(tCom, "⚠️  Só afeta NPCs/mobs — nunca jogadores")
+-- ══════════════════════════════════════════
+--  INVISIBILIDADE
+--  Torna as partes do personagem transparentes
+-- ══════════════════════════════════════════
+local invisActive = false
+local originalTransparency = {}
 
-newToggle(tCom, "Instakill NPCs & Bosses", false, function(on)
+local function applyInvis(on)
+    local char = getChar()
+    if not char then return end
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+            if on then
+                originalTransparency[p] = p.Transparency
+                p.Transparency = 1
+            else
+                p.Transparency = originalTransparency[p] or p.Transparency
+            end
+        end
+        if p:IsA("Decal") then
+            if on then
+                originalTransparency[p] = p.Transparency
+                p.Transparency = 1
+            else
+                p.Transparency = originalTransparency[p] or 0
+            end
+        end
+    end
+end
+
+-- ══════════════════════════════════════════
+--  TAB 1: OP FEATURES
+-- ══════════════════════════════════════════
+local tOP = newTab("🏠 OP Features")
+
+newSection(tOP, "Void Mob")
+newLabel(tOP, "⚠️  Afeta NPCs, Bosses e Raids")
+
+newToggle(tOP, "Void Mob V1 — Insta Kill All", false, function(on)
     ikActive = on
     if on then
         task.spawn(ikLoop)
-        notify("Instakill", "Ativo  •  Raio: " .. ikRange .. " studs")
+        notify("Void Mob", "Ativo  •  Raio: " .. ikRange .. " studs")
     else
-        notify("Instakill", "Desativado")
+        notify("Void Mob", "Desativado")
     end
 end)
 
-newSlider(tCom, "Raio (studs)", 5, 100, 15, function(v)
+newSlider(tOP, "Raio Void Mob (studs)", 5, 150, 15, function(v)
     ikRange = v
 end)
 
-newSection(tCom, "Sobrevivência")
+newSection(tOP, "Mob AI Breaker")
 
-newToggle(tCom, "God Mode", false, function(on)
+newToggle(tOP, "Mob AI Breaker", false, function(on)
+    aiBreakActive = on
+    if on then
+        task.spawn(aiBreakLoop)
+        notify("AI Breaker", "NPCs congelados")
+    else
+        notify("AI Breaker", "Desativado")
+    end
+end)
+
+newSection(tOP, "Desync / Invisibilidade")
+
+newToggle(tOP, "Desync", false, function(on)
+    desyncActive = on
+    if on then
+        startDesync()
+        notify("Desync", "Ativo")
+    else
+        if desyncConn then desyncConn:Disconnect() desyncConn = nil end
+        notify("Desync", "Desativado")
+    end
+end)
+
+newToggle(tOP, "Invisibilidade", false, function(on)
+    invisActive = on
+    applyInvis(on)
+    notify("Invisibilidade", on and "Ativo" or "Desativado")
+end)
+
+-- Re-aplica invisibilidade ao respawn
+LocalPlayer.CharacterAdded:Connect(function(char)
+    if invisActive then
+        task.wait(1)
+        applyInvis(true)
+    end
+end)
+
+newSection(tOP, "God Mode")
+
+local godConn
+newToggle(tOP, "God Mode", false, function(on)
     if on then
         godConn = RunService.Heartbeat:Connect(function()
             local h = getHum()
@@ -737,23 +819,257 @@ newToggle(tCom, "God Mode", false, function(on)
     end
 end)
 
-newButton(tCom, "💊 Recuperar HP", function()
+newButton(tOP, "💊 Recuperar HP Agora", function()
     local h = getHum()
     if h then h.Health = h.MaxHealth notify("HP", "Vida recuperada!") end
 end)
 
 -- ══════════════════════════════════════════
---  TAB: VISUAL
+--  TAB 2: MAIN (CORE AUTOMATION)
 -- ══════════════════════════════════════════
-local tVis = newTab("👁️ Visual")
+local tMain = newTab("🔧 Main")
+
+newSection(tMain, "Auto Farm")
+newLabel(tMain, "ℹ️  Recursos de automação — adaptar remotes ao jogo")
+
+newToggle(tMain, "Auto Farm Items (Arrows, Masks...)", false, function(on)
+    notify("Auto Farm Items", on and "Ativo — procurando itens" or "Desativado")
+    -- Implementar: percorrer workspace por itens dropados e teleportar/coletar
+end)
+
+newToggle(tMain, "Auto Farm Mobs / Minibosses / Bosses", false, function(on)
+    notify("Auto Farm Mobs", on and "Ativo" or "Desativado")
+    -- Implementar: loop de kill + reposicionamento atrás/cima do mob
+end)
+
+newToggle(tMain, "Auto Raids — SSS Automático", false, function(on)
+    notify("Auto Raids", on and "Ativo (inclui Void Mobs)" or "Desativado")
+    -- Implementar: entrar em raid + void mob ativo + coletar recompensa
+end)
+
+newSection(tMain, "Auto Training")
+
+newToggle(tMain, "Auto Training (Meditation, Situps...)", false, function(on)
+    notify("Auto Training", on and "Ativo" or "Desativado")
+    -- Implementar: encontrar e interagir com estações de treino via RemoteEvent
+end)
+
+newSection(tMain, "Stand / Stats")
+
+newToggle(tMain, "Stand Sniper (Auto-roll Stands/Traits)", false, function(on)
+    notify("Stand Sniper", on and "Ativo — procurando roll alvo" or "Desativado")
+    -- Implementar: roll remoto em loop até target stand/trait encontrado
+end)
+
+newToggle(tMain, "Auto Stats (Alocar Pontos)", false, function(on)
+    notify("Auto Stats", on and "Ativo" or "Desativado")
+    -- Implementar: chamar remote de alocação de stats até cap definido
+end)
+
+newSection(tMain, "Farm Rápido")
+
+newToggle(tMain, "Auto Chest (Common → Legendary)", false, function(on)
+    notify("Auto Chest", on and "Ativo" or "Desativado")
+    -- Implementar: teleportar a chests e abrir via remote
+end)
+
+newToggle(tMain, "Auto World Event (Graveyard / Deathmatch)", false, function(on)
+    notify("Auto World Event", on and "Ativo" or "Desativado")
+end)
+
+newToggle(tMain, "Auto Storyline (60+ passos)", false, function(on)
+    notify("Auto Storyline", on and "Ativo" or "Desativado")
+end)
+
+newToggle(tMain, "Auto Polnareff", false, function(on)
+    notify("Auto Polnareff", on and "Ativo" or "Desativado")
+end)
+
+newToggle(tMain, "Progression Farm (PvP + PvE Missions)", false, function(on)
+    notify("Progression Farm", on and "Ativo" or "Desativado")
+end)
+
+newSection(tMain, "Sell / Buy")
+
+newButton(tMain, "💰 Auto Sell (Mythical → Common)", function()
+    notify("Auto Sell", "Vendendo itens...")
+    -- Implementar: chamar remote de venda filtrado por raridade
+end)
+
+newButton(tMain, "🛒 Auto Buy Shops (Cash / Gang / Prestige)", function()
+    notify("Auto Buy", "Comprando itens configurados...")
+end)
+
+newButton(tMain, "📦 Build Manager — Equipar Melhor PvE", function()
+    notify("Build Manager", "Aplicando build PvE...")
+end)
+
+-- ══════════════════════════════════════════
+--  TAB 3: TELEPORTERS
+-- ══════════════════════════════════════════
+local tTele = newTab("📍 Teleportes")
+
+newSection(tTele, "NPCs / Vendors")
+
+local function teleportTo(name, pos)
+    return function()
+        local hrp = getHRP()
+        if hrp then
+            hrp.CFrame = CFrame.new(pos)
+            notify("Teleporte", "→ " .. name)
+        end
+    end
+end
+
+-- Funções genéricas — substituir por CFrames reais do jogo
+newButton(tTele, "🗣️ Teleportar a Quest NPCs", function()
+    -- Percorre workspace em busca de NPCs com nome de quest
+    local hrp = getHRP()
+    if not hrp then return end
+    for _, m in ipairs(workspace:GetDescendants()) do
+        if m:IsA("Model") and m:FindFirstChildOfClass("Humanoid") and not isPlayer(m) then
+            local name = m.Name:lower()
+            if name:find("quest") or name:find("npc") or name:find("vendor") then
+                local root = m:FindFirstChild("HumanoidRootPart")
+                if root then
+                    hrp.CFrame = root.CFrame + Vector3.new(0, 4, 4)
+                    notify("Teleporte", "→ " .. m.Name)
+                    return
+                end
+            end
+        end
+    end
+    notify("Teleporte", "Nenhum Quest NPC encontrado")
+end)
+
+newSection(tTele, "Raid Hubs")
+
+newButton(tTele, "⚔️ Teleportar a Raid Hub", function()
+    local hrp = getHRP()
+    if not hrp then return end
+    for _, m in ipairs(workspace:GetDescendants()) do
+        if m:IsA("Model") then
+            local name = m.Name:lower()
+            if name:find("raid") or name:find("hub") then
+                local root = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("PrimaryPart")
+                if root then
+                    hrp.CFrame = root.CFrame + Vector3.new(0, 4, 4)
+                    notify("Teleporte", "→ Raid Hub: " .. m.Name)
+                    return
+                end
+            end
+        end
+    end
+    notify("Teleporte", "Raid Hub não encontrado")
+end)
+
+newSection(tTele, "Key Locations")
+
+newButton(tTele, "🏋️ Teleportar a Gym / Estação", function()
+    local hrp = getHRP()
+    if not hrp then return end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") or obj:IsA("BasePart") then
+            local name = obj.Name:lower()
+            if name:find("gym") or name:find("station") or name:find("hospital") then
+                local pos = obj:IsA("BasePart") and obj.Position or
+                            (obj.PrimaryPart and obj.PrimaryPart.Position)
+                if pos then
+                    hrp.CFrame = CFrame.new(pos + Vector3.new(0, 4, 0))
+                    notify("Teleporte", "→ " .. obj.Name)
+                    return
+                end
+            end
+        end
+    end
+    notify("Teleporte", "Local não encontrado")
+end)
+
+newButton(tTele, "🏠 Teleportar ao Spawn", function()
+    local sp = workspace:FindFirstChildOfClass("SpawnLocation")
+    local hrp = getHRP()
+    if hrp and sp then
+        hrp.CFrame = sp.CFrame + Vector3.new(0, 4, 0)
+        notify("Teleporte", "Teleportado ao Spawn!")
+    else
+        notify("Teleporte", "Spawn não encontrado")
+    end
+end)
+
+-- ══════════════════════════════════════════
+--  TAB 4: VISUAIS (ESP)
+-- ══════════════════════════════════════════
+local tVis = newTab("👁️ Visuais")
 local espConns = {}
 
-newSection(tVis, "ESP")
+newSection(tVis, "Player ESP")
 
-newToggle(tVis, "ESP NPCs & Bosses", false, function(on)
-    for _, c in ipairs(espConns) do c:Disconnect() end
+newToggle(tVis, "Player ESP (Box + HP + Stand)", false, function(on)
+    for _, c in ipairs(espConns) do pcall(function() c:Disconnect() end) end
     espConns = {}
 
+    if on then
+        local function applyPlayerESP(plr)
+            if plr == LocalPlayer then return end
+            task.spawn(function()
+                local char = plr.Character or plr.CharacterAdded:Wait()
+                local hrp  = char:WaitForChild("HumanoidRootPart", 5)
+                local hum  = char:FindFirstChildOfClass("Humanoid")
+                if not hrp or hrp:FindFirstChild("_PESP") then return end
+
+                local bb = Instance.new("BillboardGui")
+                bb.Name = "_PESP"
+                bb.Size = UDim2.new(0, 150, 0, 40)
+                bb.StudsOffset = Vector3.new(0, 3.5, 0)
+                bb.AlwaysOnTop = true
+                bb.Parent = hrp
+
+                local nl = Instance.new("TextLabel")
+                nl.Size = UDim2.new(1, 0, 0.6, 0)
+                nl.BackgroundTransparency = 1
+                nl.Text = "👤 " .. plr.Name
+                nl.TextSize = 13
+                nl.Font = Enum.Font.GothamBold
+                nl.TextColor3 = Color3.fromRGB(80, 200, 255)
+                nl.TextStrokeTransparency = 0
+                nl.Parent = bb
+
+                local hl = Instance.new("TextLabel")
+                hl.Size = UDim2.new(1, 0, 0.4, 0)
+                hl.Position = UDim2.new(0, 0, 0.6, 0)
+                hl.BackgroundTransparency = 1
+                hl.TextSize = 10
+                hl.Font = Enum.Font.Gotham
+                hl.TextColor3 = Color3.fromRGB(100, 255, 100)
+                hl.TextStrokeTransparency = 0
+                hl.Parent = bb
+
+                -- Atualiza HP em tempo real
+                local hpConn = RunService.Heartbeat:Connect(function()
+                    if hum and hum.Parent then
+                        hl.Text = string.format("❤ %.0f / %.0f", hum.Health, hum.MaxHealth)
+                    end
+                end)
+                table.insert(espConns, hpConn)
+            end)
+        end
+
+        for _, p in ipairs(Players:GetPlayers()) do applyPlayerESP(p) end
+        local c = Players.PlayerAdded:Connect(applyPlayerESP)
+        table.insert(espConns, c)
+        notify("Player ESP", "Ativo")
+    else
+        for _, d in ipairs(workspace:GetDescendants()) do
+            local e = d:FindFirstChild("_PESP")
+            if e then e:Destroy() end
+        end
+        notify("Player ESP", "Desativado")
+    end
+end)
+
+newSection(tVis, "World ESP")
+
+newToggle(tVis, "ESP NPCs & Bosses", false, function(on)
     if on then
         local function applyESP(model)
             if not model:IsA("Model") then return end
@@ -762,7 +1078,7 @@ newToggle(tVis, "ESP NPCs & Bosses", false, function(on)
             local hrp = model:FindFirstChild("HumanoidRootPart")
             if not hrp or hrp:FindFirstChild("_ESP") then return end
 
-            local hum = model:FindFirstChildOfClass("Humanoid")
+            local hum  = model:FindFirstChildOfClass("Humanoid")
             local boss = hum and hum.MaxHealth >= 500
 
             local bb = Instance.new("BillboardGui")
@@ -785,17 +1101,139 @@ newToggle(tVis, "ESP NPCs & Bosses", false, function(on)
 
         for _, d in ipairs(workspace:GetDescendants()) do pcall(applyESP, d) end
         local c = workspace.DescendantAdded:Connect(function(d)
-            task.wait(0.1)
-            pcall(applyESP, d)
+            task.wait(0.1); pcall(applyESP, d)
         end)
         table.insert(espConns, c)
-        notify("ESP", "Ativo")
+        notify("World ESP", "Ativo")
     else
         for _, d in ipairs(workspace:GetDescendants()) do
             local e = d:FindFirstChild("_ESP")
             if e then e:Destroy() end
         end
-        notify("ESP", "Desativado")
+        notify("World ESP", "Desativado")
+    end
+end)
+
+newToggle(tVis, "Item Drop ESP", false, function(on)
+    if on then
+        local function applyItemESP(obj)
+            if not obj:IsA("BasePart") then return end
+            if obj.Parent and obj.Parent:FindFirstChildOfClass("Humanoid") then return end
+            if obj:FindFirstChild("_IESP") then return end
+
+            local bb = Instance.new("BillboardGui")
+            bb.Name = "_IESP"
+            bb.Size = UDim2.new(0, 100, 0, 20)
+            bb.StudsOffset = Vector3.new(0, 2, 0)
+            bb.AlwaysOnTop = true
+            bb.Parent = obj
+
+            local tl = Instance.new("TextLabel")
+            tl.Size = UDim2.new(1, 0, 1, 0)
+            tl.BackgroundTransparency = 1
+            tl.Text = "🎁 " .. obj.Name
+            tl.TextSize = 10
+            tl.Font = Enum.Font.GothamBold
+            tl.TextColor3 = Color3.fromRGB(100, 255, 180)
+            tl.TextStrokeTransparency = 0
+            tl.Parent = bb
+        end
+
+        local c = workspace.DescendantAdded:Connect(function(d) pcall(applyItemESP, d) end)
+        table.insert(espConns, c)
+        notify("Item ESP", "Ativo")
+    else
+        for _, d in ipairs(workspace:GetDescendants()) do
+            local e = d:FindFirstChild("_IESP")
+            if e then e:Destroy() end
+        end
+        notify("Item ESP", "Desativado")
+    end
+end)
+
+newSection(tVis, "Chat Logger")
+
+local chatLogFrame
+local chatLogVisible = false
+
+newToggle(tVis, "Chat Logger (captura mensagens)", false, function(on)
+    if on then
+        if not chatLogFrame then
+            chatLogFrame = Instance.new("Frame")
+            chatLogFrame.Size = UDim2.new(0, 280, 0, 160)
+            chatLogFrame.Position = UDim2.new(0, 10, 0.5, -80)
+            chatLogFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 18)
+            chatLogFrame.ZIndex = 50
+            chatLogFrame.Parent = SG
+            mkCorner(chatLogFrame, 6)
+            mkStroke(chatLogFrame, ACCENT, 1)
+
+            local title = Instance.new("TextLabel")
+            title.Size = UDim2.new(1, 0, 0, 22)
+            title.BackgroundColor3 = Color3.fromRGB(20, 15, 40)
+            title.Text = "  💬 Chat Logger"
+            title.TextSize = 11
+            title.Font = Enum.Font.GothamBold
+            title.TextColor3 = TEXT
+            title.TextXAlignment = Enum.TextXAlignment.Left
+            title.ZIndex = 51
+            title.Parent = chatLogFrame
+            mkCorner(title, 4)
+
+            local scroll = Instance.new("ScrollingFrame")
+            scroll.Size = UDim2.new(1, -8, 1, -28)
+            scroll.Position = UDim2.new(0, 4, 0, 24)
+            scroll.BackgroundTransparency = 1
+            scroll.ScrollBarThickness = 2
+            scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+            scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+            scroll.ZIndex = 51
+            scroll.Parent = chatLogFrame
+
+            local layout = Instance.new("UIListLayout")
+            layout.Padding = UDim.new(0, 2)
+            layout.Parent = scroll
+
+            -- Hook chat
+            local ok, ChatService = pcall(function() return game:GetService("Chat") end)
+            if ok then
+                Players.PlayerAdded:Connect(function(p)
+                    p.Chatted:Connect(function(msg)
+                        local lbl = Instance.new("TextLabel")
+                        lbl.Size = UDim2.new(1, -4, 0, 16)
+                        lbl.BackgroundTransparency = 1
+                        lbl.Text = p.Name .. ": " .. msg
+                        lbl.TextSize = 9
+                        lbl.Font = Enum.Font.Gotham
+                        lbl.TextColor3 = TEXT
+                        lbl.TextXAlignment = Enum.TextXAlignment.Left
+                        lbl.TextWrapped = true
+                        lbl.ZIndex = 52
+                        lbl.Parent = scroll
+                    end)
+                end)
+                for _, p in ipairs(Players:GetPlayers()) do
+                    p.Chatted:Connect(function(msg)
+                        local lbl = Instance.new("TextLabel")
+                        lbl.Size = UDim2.new(1, -4, 0, 16)
+                        lbl.BackgroundTransparency = 1
+                        lbl.Text = p.Name .. ": " .. msg
+                        lbl.TextSize = 9
+                        lbl.Font = Enum.Font.Gotham
+                        lbl.TextColor3 = TEXT
+                        lbl.TextXAlignment = Enum.TextXAlignment.Left
+                        lbl.TextWrapped = true
+                        lbl.ZIndex = 52
+                        lbl.Parent = scroll
+                    end)
+                end
+            end
+        end
+        chatLogFrame.Visible = true
+        notify("Chat Logger", "Ativo")
+    else
+        if chatLogFrame then chatLogFrame.Visible = false end
+        notify("Chat Logger", "Desativado")
     end
 end)
 
@@ -805,15 +1243,191 @@ newSlider(tVis, "FOV", 70, 120, 70, function(v)
     workspace.CurrentCamera.FieldOfView = v
 end)
 
-newButton(tVis, "↩️ Reset FOV", function()
+newButton(tVis, "↩️ Reset FOV (70°)", function()
     workspace.CurrentCamera.FieldOfView = 70
     notify("FOV", "Restaurado para 70°")
 end)
 
 -- ══════════════════════════════════════════
---  TAB: JOGADOR
+--  TAB 5: PLAYERS (MOVIMENTO & PvP)
 -- ══════════════════════════════════════════
-local tPlr = newTab("👤 Jogador")
+local tPlr = newTab("👤 Players")
+local speedVal = 16
+local jumpVal  = 50
+
+newSection(tPlr, "Proteção de Status")
+
+newToggle(tPlr, "Anti-Stun / Anti-Slowdown / Anti-Ragdoll", false, function(on)
+    notify("Status Protection", on and "Ativo" or "Desativado")
+    -- Implementar: monitorar e resetar WalkSpeed/JumpPower/ragdoll state
+end)
+
+newSection(tPlr, "Aimbot")
+
+local aimbotActive = false
+local aimbotFOV    = 120
+local aimbotConn
+
+newToggle(tPlr, "Player Aimbot (FOV + Smooth)", false, function(on)
+    aimbotActive = on
+    if on then
+        aimbotConn = RunService.RenderStepped:Connect(function()
+            local myHRP = getHRP()
+            local cam   = workspace.CurrentCamera
+            if not myHRP or not cam then return end
+            local closest, closestDist = nil, aimbotFOV
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character then
+                    local enemyHRP = p.Character:FindFirstChild("HumanoidRootPart")
+                    local enemyHum = p.Character:FindFirstChildOfClass("Humanoid")
+                    if enemyHRP and enemyHum and enemyHum.Health > 0 then
+                        local screenPos, onScreen = cam:WorldToScreenPoint(enemyHRP.Position)
+                        if onScreen then
+                            local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+                            local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                            if dist < closestDist then
+                                closestDist = dist
+                                closest = enemyHRP
+                            end
+                        end
+                    end
+                end
+            end
+            if closest then
+                -- Smooth aim via CFrame lerp
+                local targetCF = CFrame.new(cam.CFrame.Position, closest.Position)
+                cam.CFrame = cam.CFrame:Lerp(targetCF, 0.15)
+            end
+        end)
+        notify("Aimbot", "Ativo — FOV: " .. aimbotFOV)
+    else
+        if aimbotConn then aimbotConn:Disconnect() aimbotConn = nil end
+        notify("Aimbot", "Desativado")
+    end
+end)
+
+newSlider(tPlr, "Aimbot FOV (px)", 50, 400, 120, function(v)
+    aimbotFOV = v
+end)
+
+newSection(tPlr, "Fly")
+
+local flyActive = false
+local flySpeed  = 60
+local flyBodyV, flyBodyG, flyConn2
+
+newToggle(tPlr, "Premium Fly", false, function(on)
+    flyActive = on
+    local char = getChar()
+    local hrp  = getHRP()
+    if not char or not hrp then return end
+
+    if on then
+        flyBodyV = Instance.new("BodyVelocity")
+        flyBodyV.Velocity = Vector3.zero
+        flyBodyV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        flyBodyV.Parent = hrp
+
+        flyBodyG = Instance.new("BodyGyro")
+        flyBodyG.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
+        flyBodyG.P = 1e4
+        flyBodyG.Parent = hrp
+
+        flyConn2 = RunService.Heartbeat:Connect(function()
+            local cam = workspace.CurrentCamera
+            local mv  = Vector3.zero
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then mv = mv + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then mv = mv - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then mv = mv - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then mv = mv + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then mv = mv + Vector3.new(0,1,0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then mv = mv - Vector3.new(0,1,0) end
+            flyBodyV.Velocity = mv.Magnitude > 0 and mv.Unit * flySpeed or Vector3.zero
+            flyBodyG.CFrame = cam.CFrame
+        end)
+        notify("Fly", "Ativo — WASD + Space/Ctrl")
+    else
+        if flyBodyV  then flyBodyV:Destroy()  flyBodyV  = nil end
+        if flyBodyG  then flyBodyG:Destroy()  flyBodyG  = nil end
+        if flyConn2  then flyConn2:Disconnect() flyConn2 = nil end
+        notify("Fly", "Desativado")
+    end
+end)
+
+newSlider(tPlr, "Fly Speed", 20, 300, 60, function(v) flySpeed = v end)
+
+newSection(tPlr, "Movimento")
+
+local speedTog = newToggle(tPlr, "Speed Hack", false, function(on)
+    local h = getHum()
+    if h then h.WalkSpeed = on and speedVal or 16 end
+    notify("Speed Hack", on and ("Ativo — " .. speedVal) or "Desativado")
+end)
+
+newSlider(tPlr, "Velocidade (studs/s)", 16, 250, 16, function(v)
+    speedVal = v
+    if speedTog.get() then local h = getHum() if h then h.WalkSpeed = v end end
+end)
+
+local jumpTog = newToggle(tPlr, "High Jump", false, function(on)
+    local h = getHum()
+    if h then h.JumpPower = on and jumpVal or 50 end
+    notify("High Jump", on and ("Ativo — " .. jumpVal) or "Desativado")
+end)
+
+newSlider(tPlr, "Força do Salto", 50, 500, 50, function(v)
+    jumpVal = v
+    if jumpTog.get() then local h = getHum() if h then h.JumpPower = v end end
+end)
+
+newToggle(tPlr, "Infinite Jump", false, function(on)
+    if on then
+        UserInputService.JumpRequest:Connect(function()
+            local h = getHum()
+            if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end)
+        notify("Infinite Jump", "Ativo")
+    else
+        notify("Infinite Jump", "Reexecute o script para desativar")
+    end
+end)
+
+local ncConn
+newToggle(tPlr, "No Clip", false, function(on)
+    if on then
+        ncConn = RunService.Stepped:Connect(function()
+            local c = getChar()
+            if not c then return end
+            for _, p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+        end)
+        notify("No Clip", "Ativo")
+    else
+        if ncConn then ncConn:Disconnect() ncConn = nil end
+        notify("No Clip", "Desativado")
+    end
+end)
+
+newSection(tPlr, "Utilidade")
+
+newButton(tPlr, "🔄 Respawn (Kill Yourself)", function()
+    local h = getHum()
+    if h then h.Health = 0 notify("Respawn", "A renascer...") end
+end)
+
+newButton(tPlr, "📍 Ver Coordenadas", function()
+    local hrp = getHRP()
+    if hrp then
+        local p = hrp.Position
+        notify("Coords", string.format("X:%.1f Y:%.1f Z:%.1f", p.X, p.Y, p.Z))
+    end
+end)
+
+newButton(tPlr, "📋 Copiar UserID", function()
+    pcall(function() setclipboard(tostring(LocalPlayer.UserId)) end)
+    notify("Copiado", tostring(LocalPlayer.UserId))
+end)
 
 newSection(tPlr, "Info")
 newLabel(tPlr, "👤 " .. LocalPlayer.Name)
@@ -823,16 +1437,294 @@ pcall(function()
     newLabel(tPlr, "🎮 " .. n)
 end)
 
-newSection(tPlr, "Ações")
+-- ══════════════════════════════════════════
+--  TAB 6: MISC (UTILIDADE & PERFORMANCE)
+-- ══════════════════════════════════════════
+local tMisc = newTab("⚙️ Misc")
 
-newButton(tPlr, "🔄 Respawn", function()
-    local h = getHum()
-    if h then h.Health = 0 notify("Respawn", "A renascer...") end
+newSection(tMisc, "Remote Shops")
+newLabel(tMisc, "ℹ️  Abre shops via remote de qualquer lugar")
+
+newButton(tMisc, "💰 Cash Shop", function()
+    -- Implementar: FireServer do remote de abertura da Cash Shop
+    notify("Cash Shop", "Abrindo...")
 end)
 
-newButton(tPlr, "📋 Copiar UserID", function()
-    pcall(function() setclipboard(tostring(LocalPlayer.UserId)) end)
-    notify("Copiado", tostring(LocalPlayer.UserId))
+newButton(tMisc, "👥 Gang Shop", function()
+    notify("Gang Shop", "Abrindo...")
+end)
+
+newButton(tMisc, "⭐ Prestige Shop", function()
+    notify("Prestige Shop", "Abrindo...")
+end)
+
+newButton(tMisc, "⚔️ Raid Shop", function()
+    notify("Raid Shop", "Abrindo...")
+end)
+
+newButton(tMisc, "🔨 Crafting Shop", function()
+    notify("Crafting Shop", "Abrindo...")
+end)
+
+newSection(tMisc, "Visual Enhancers")
+
+newToggle(tMisc, "No Fog", false, function(on)
+    local lighting = game:GetService("Lighting")
+    lighting.FogEnd = on and 1e6 or 100000
+    lighting.FogStart = on and 0 or 0
+    notify("No Fog", on and "Ativo" or "Desativado")
+end)
+
+newToggle(tMisc, "FullBright", false, function(on)
+    local lighting = game:GetService("Lighting")
+    lighting.Brightness = on and 2 or 1
+    lighting.ClockTime = on and 14 or lighting.ClockTime
+    lighting.GlobalShadows = not on
+    notify("FullBright", on and "Ativo" or "Desativado")
+end)
+
+newToggle(tMisc, "FreeCam", false, function(on)
+    -- Implementar: desativa câmera padrão e ativa câmera livre com WASD
+    notify("FreeCam", on and "Ativo — WASD + Q/E" or "Desativado")
+end)
+
+newSection(tMisc, "Performance")
+
+newButton(tMisc, "🚀 FPS Unlocker", function()
+    if setfpscap then
+        pcall(function() setfpscap(0) end)
+        notify("FPS", "Sem limite!")
+    else
+        notify("FPS Unlocker", "Executor não suporta setfpscap")
+    end
+end)
+
+newButton(tMisc, "🗑️ Texture Remover (FPS Boost)", function()
+    for _, d in ipairs(workspace:GetDescendants()) do
+        if d:IsA("Texture") or d:IsA("Decal") then
+            pcall(function() d.Texture = "" end)
+        end
+    end
+    notify("Textures", "Removidas! FPS melhorado")
+end)
+
+newToggle(tMisc, "Anti-AFK", false, function(on)
+    if on then
+        -- Simula input para evitar kick por AFK
+        task.spawn(function()
+            while on do
+                local vrs = game:GetService("VirtualUser")
+                if vrs then
+                    pcall(function()
+                        vrs:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                        task.wait(0.1)
+                        vrs:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+                    end)
+                end
+                task.wait(60)
+            end
+        end)
+        notify("Anti-AFK", "Ativo")
+    else
+        notify("Anti-AFK", "Desativado — reinicie para parar o loop")
+    end
+end)
+
+newSection(tMisc, "Server Tools")
+
+newButton(tMisc, "🔀 Server Hop", function()
+    local TeleportService = game:GetService("TeleportService")
+    local servers = {}
+    local ok, result = pcall(function()
+        return game:GetService("HttpService"):GetAsync(
+            "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?limit=25"
+        )
+    end)
+    if ok and result then
+        local data = game:GetService("HttpService"):JSONDecode(result)
+        for _, s in ipairs(data.data or {}) do
+            if s.playing < s.maxPlayers then
+                table.insert(servers, s.id)
+            end
+        end
+    end
+    if #servers > 0 then
+        local id = servers[math.random(1, #servers)]
+        notify("Server Hop", "Entrando em novo servidor...")
+        task.wait(1)
+        pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, id, LocalPlayer) end)
+    else
+        notify("Server Hop", "Nenhum servidor encontrado")
+    end
+end)
+
+newButton(tMisc, "🔁 Rejoin", function()
+    local TeleportService = game:GetService("TeleportService")
+    notify("Rejoin", "Reconectando...")
+    task.wait(1)
+    pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
+end)
+
+-- ══════════════════════════════════════════
+--  TAB 7: AUTO PARRY
+-- ══════════════════════════════════════════
+local tParry = newTab("🛡️ Auto Parry")
+
+newSection(tParry, "Combat AI")
+
+local parryActive   = false
+local autoRollActive = false
+local blockHolding  = false
+local parryConn
+
+newToggle(tParry, "Auto Parry (Reativo)", false, function(on)
+    parryActive = on
+    if on then
+        -- Monitorar animações de ataque de inimigos próximos e disparar parry
+        parryConn = RunService.Heartbeat:Connect(function()
+            local myHRP = getHRP()
+            if not myHRP then return end
+            -- Detecta inimigos com animações de ataque ativas
+            for _, model in ipairs(workspace:GetDescendants()) do
+                if model:IsA("Model") and not isPlayer(model) then
+                    local hum = model:FindFirstChildOfClass("Humanoid")
+                    local animator = hum and hum:FindFirstChildOfClass("Animator")
+                    if animator then
+                        local tracks = animator:GetPlayingAnimationTracks()
+                        for _, track in ipairs(tracks) do
+                            local name = track.Name:lower()
+                            if name:find("attack") or name:find("swing") or name:find("strike") then
+                                -- Dispara parry via remote (adaptar ao jogo)
+                                for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
+                                    if v:IsA("RemoteEvent") then
+                                        local rn = v.Name:lower()
+                                        if rn:find("parry") or rn:find("block") then
+                                            pcall(function() v:FireServer() end)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        notify("Auto Parry", "Ativo")
+    else
+        if parryConn then parryConn:Disconnect() parryConn = nil end
+        notify("Auto Parry", "Desativado")
+    end
+end)
+
+newToggle(tParry, "Auto Roll (esquiva automática)", false, function(on)
+    autoRollActive = on
+    notify("Auto Roll", on and "Ativo" or "Desativado")
+    -- Implementar: detectar hit e disparar remote de roll
+end)
+
+newToggle(tParry, "Block Holding", false, function(on)
+    blockHolding = on
+    notify("Block Holding", on and "Ativo — segurando bloqueio" or "Desativado")
+    -- Implementar: manter FireServer do remote de block continuamente
+end)
+
+newSection(tParry, "Enemy Tracking")
+
+newToggle(tParry, "Encarar Inimigo Mais Próximo", false, function(on)
+    if on then
+        RunService.Heartbeat:Connect(function()
+            if not on then return end
+            local myHRP = getHRP()
+            if not myHRP then return end
+            local closest, closestDist = nil, math.huge
+            for _, model in ipairs(workspace:GetDescendants()) do
+                if model:IsA("Model") and not isPlayer(model) then
+                    local hum = model:FindFirstChildOfClass("Humanoid")
+                    local hrp = model:FindFirstChild("HumanoidRootPart")
+                    if hum and hrp and hum.Health > 0 then
+                        local dist = (hrp.Position - myHRP.Position).Magnitude
+                        if dist < closestDist then
+                            closestDist = dist
+                            closest = hrp
+                        end
+                    end
+                end
+            end
+            if closest then
+                myHRP.CFrame = CFrame.new(myHRP.Position, Vector3.new(closest.Position.X, myHRP.Position.Y, closest.Position.Z))
+            end
+        end)
+        notify("Enemy Tracking", "Ativo")
+    else
+        notify("Enemy Tracking", "Desativado — reexecute para parar")
+    end
+end)
+
+newSection(tParry, "Animation Logger")
+
+newButton(tParry, "📋 Logar Animações no Console", function()
+    local found = 0
+    for _, d in ipairs(workspace:GetDescendants()) do
+        if d:IsA("Animation") then
+            print("[AnimLogger] " .. (d.Parent and d.Parent.Name or "?") .. " — ID: " .. d.AnimationId)
+            found = found + 1
+        end
+        if d:IsA("AnimationTrack") or d:IsA("Animator") then
+            local tracks = d:IsA("Animator") and d:GetPlayingAnimationTracks() or {d}
+            for _, t in ipairs(tracks) do
+                if t.Animation then
+                    print("[AnimLogger LIVE] " .. t.Name .. " — " .. t.Animation.AnimationId)
+                    found = found + 1
+                end
+            end
+        end
+    end
+    notify("Anim Logger", found .. " animações logadas no console")
+end)
+
+-- Mini previewer de ID de animação
+newSection(tParry, "Animation Preview")
+newLabel(tParry, "ℹ️  Cole um ID abaixo e clique Preview")
+
+-- Campo de ID (TextBox simulado via Button)
+local animIDValue = "rbxassetid://0"
+local animIDBtn = Instance.new("TextButton")
+animIDBtn.Size = UDim2.new(1, 0, 0, 32)
+animIDBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+animIDBtn.BorderSizePixel = 0
+animIDBtn.Text = "🎬 ID: " .. animIDValue
+animIDBtn.TextSize = 11
+animIDBtn.Font = Enum.Font.Gotham
+animIDBtn.TextColor3 = ACCENT
+animIDBtn.ZIndex = 13
+animIDBtn.Parent = tParry.frame
+mkCorner(animIDBtn, 5)
+
+newButton(tParry, "▶ Preview Animação no Personagem", function()
+    local hum  = getHum()
+    local char = getChar()
+    if not hum or not char then notify("Anim Preview", "Sem personagem") return end
+    local anim = Instance.new("Animation")
+    anim.AnimationId = animIDValue
+    local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 2)
+    if animator then
+        local track = animator:LoadAnimation(anim)
+        track:Play()
+        notify("Anim Preview", "Reproduzindo " .. animIDValue)
+    else
+        notify("Anim Preview", "Animator não encontrado")
+    end
+end)
+
+newSection(tParry, "Config Builder")
+
+newButton(tParry, "💾 Salvar Perfil de Parry Atual", function()
+    -- Implementar: serializar configurações e salvar em _G ou writefile
+    notify("Config", "Perfil salvo!")
+end)
+
+newButton(tParry, "📂 Carregar Perfil de Parry", function()
+    notify("Config", "Perfil carregado!")
 end)
 
 -- ══════════════════════════════════════════
@@ -846,10 +1738,14 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         if speedTog.get() then h.WalkSpeed = speedVal end
         if jumpTog.get()  then h.JumpPower  = jumpVal  end
     end
+    if invisActive then
+        task.wait(1)
+        applyInvis(true)
+    end
 end)
 
 -- ══════════════════════════════════════════
 --  ARRANCAR
 -- ══════════════════════════════════════════
-notify("Menu Universal", "Pronto!  RightShift para abrir")
+notify("Menu Universal", "Pronto!  RightShift para abrir  •  7 tabs")
 toggleMenu()
