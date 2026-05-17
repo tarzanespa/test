@@ -1,7 +1,6 @@
 -- ============================================================
---  MENU UNIVERSAL ROBLOX  |  Script completo
+--  MENU UNIVERSAL ROBLOX  |  Reescrito do zero
 --  Abre/Fecha: RightShift
---  Compatível com Synapse X, KRNL, Fluxus, etc.
 -- ============================================================
 
 local Players          = game:GetService("Players")
@@ -11,298 +10,569 @@ local RunService       = game:GetService("RunService")
 local LocalPlayer      = Players.LocalPlayer
 local Mouse            = LocalPlayer:GetMouse()
 
-local CONFIG = {
-    Title       = "🌌 Universal Menu",
-    SubTitle    = "v1.0",
-    ToggleKey   = Enum.KeyCode.RightShift,
-    AccentColor = Color3.fromRGB(100, 80, 220),
-    BgColor     = Color3.fromRGB(15, 15, 22),
-    PanelColor  = Color3.fromRGB(22, 22, 32),
-    TextColor   = Color3.fromRGB(230, 230, 255),
-    MutedColor  = Color3.fromRGB(110, 110, 150),
-}
+-- ══════════════════════════════════════════
+--  CONFIG
+-- ══════════════════════════════════════════
+local ACCENT  = Color3.fromRGB(100, 80, 220)
+local BG      = Color3.fromRGB(15, 15, 22)
+local PANEL   = Color3.fromRGB(22, 22, 32)
+local SIDE    = Color3.fromRGB(18, 18, 28)
+local TEXT    = Color3.fromRGB(230, 230, 255)
+local MUTED   = Color3.fromRGB(110, 110, 150)
+local ITEM_BG = Color3.fromRGB(28, 28, 42)
 
 local MenuOpen  = false
 local ActiveTab = nil
 local Tabs      = {}
 
-local function tween(obj, props, t)
+-- ══════════════════════════════════════════
+--  UTILS
+-- ══════════════════════════════════════════
+local function tw(obj, props, t)
     TweenService:Create(obj, TweenInfo.new(t or 0.18, Enum.EasingStyle.Quart), props):Play()
 end
-local function corner(p, r)
-    local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0, r or 6) c.Parent = p
-end
-local function stroke(p, col, th)
-    local s = Instance.new("UIStroke") s.Color = col or Color3.fromRGB(60,60,90) s.Thickness = th or 1 s.Parent = p
+
+local function mkCorner(p, r)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, r or 6)
+    c.Parent = p
 end
 
--- GUI ROOT
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "UniversalMenu"
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.ResetOnSpawn = false
-pcall(function() if syn and syn.protect_gui then syn.protect_gui(ScreenGui) end end)
-local ok, cg = pcall(function() return game:GetService("CoreGui") end)
-ScreenGui.Parent = ok and cg or LocalPlayer.PlayerGui
+local function mkStroke(p, col, th)
+    local s = Instance.new("UIStroke")
+    s.Color = col or Color3.fromRGB(55, 55, 80)
+    s.Thickness = th or 1
+    s.Parent = p
+end
 
--- JANELA
-local Window = Instance.new("Frame")
-Window.Size = UDim2.new(0,620,0,420)
-Window.Position = UDim2.new(0.5,-310,0.5,-210)
-Window.BackgroundColor3 = CONFIG.BgColor
-Window.BorderSizePixel = 0
-Window.ZIndex = 10
-Window.Visible = false
-Window.Parent = ScreenGui
-corner(Window, 12)
-stroke(Window, Color3.fromRGB(50,50,80), 1.5)
+local function mkLabel(parent, text, size, color, font, xAlign)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 1, 0)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextSize = size or 13
+    l.Font = font or Enum.Font.Gotham
+    l.TextColor3 = color or TEXT
+    l.TextXAlignment = xAlign or Enum.TextXAlignment.Left
+    l.ZIndex = 20
+    l.Parent = parent
+    return l
+end
+
+-- ══════════════════════════════════════════
+--  SCREENGUI
+-- ══════════════════════════════════════════
+local SG = Instance.new("ScreenGui")
+SG.Name = "UniMenu"
+SG.ResetOnSpawn = false
+SG.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+pcall(function()
+    if syn and syn.protect_gui then syn.protect_gui(SG) end
+end)
+local _ok, _cg = pcall(function() return game:GetService("CoreGui") end)
+SG.Parent = _ok and _cg or LocalPlayer.PlayerGui
+
+-- ══════════════════════════════════════════
+--  JANELA
+-- ══════════════════════════════════════════
+local Win = Instance.new("Frame")
+Win.Size = UDim2.new(0, 600, 0, 400)
+Win.Position = UDim2.new(0.5, -300, 0.5, -200)
+Win.BackgroundColor3 = BG
+Win.BorderSizePixel = 0
+Win.ZIndex = 10
+Win.Visible = false
+Win.Parent = SG
+mkCorner(Win, 10)
+mkStroke(Win, Color3.fromRGB(55, 45, 90), 1.5)
 
 -- Drag
 do
-    local dragging, dragStart, startPos
-    Window.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 and inp.Position.Y - Window.AbsolutePosition.Y < 56 then
-            dragging = true dragStart = inp.Position startPos = Window.Position
+    local drag, ds, sp
+    Win.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 and
+           i.Position.Y - Win.AbsolutePosition.Y < 52 then
+            drag = true; ds = i.Position; sp = Win.Position
         end
     end)
-    UserInputService.InputChanged:Connect(function(inp)
-        if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
-            local d = inp.Position - dragStart
-            Window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+d.X, startPos.Y.Scale, startPos.Y.Offset+d.Y)
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = i.Position - ds
+            Win.Position = UDim2.new(sp.X.Scale, sp.X.Offset + d.X, sp.Y.Scale, sp.Y.Offset + d.Y)
         end
     end)
-    UserInputService.InputEnded:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
     end)
 end
 
--- HEADER
-local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1,0,0,54) Header.BackgroundTransparency = 1 Header.ZIndex = 11 Header.Parent = Window
+-- ══════════════════════════════════════════
+--  HEADER
+-- ══════════════════════════════════════════
+local Hdr = Instance.new("Frame")
+Hdr.Size = UDim2.new(1, 0, 0, 50)
+Hdr.BackgroundTransparency = 1
+Hdr.ZIndex = 11
+Hdr.Parent = Win
 
-local TitleLbl = Instance.new("TextLabel")
-TitleLbl.Size = UDim2.new(1,-60,0,30) TitleLbl.Position = UDim2.new(0,16,0,6)
-TitleLbl.BackgroundTransparency = 1 TitleLbl.Text = CONFIG.Title
-TitleLbl.TextSize = 18 TitleLbl.Font = Enum.Font.GothamBold
-TitleLbl.TextColor3 = CONFIG.TextColor TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
-TitleLbl.ZIndex = 12 TitleLbl.Parent = Header
+local HdrTitle = Instance.new("TextLabel")
+HdrTitle.Size = UDim2.new(1, -50, 0, 28)
+HdrTitle.Position = UDim2.new(0, 14, 0, 8)
+HdrTitle.BackgroundTransparency = 1
+HdrTitle.Text = "🌌  Universal Menu"
+HdrTitle.TextSize = 17
+HdrTitle.Font = Enum.Font.GothamBold
+HdrTitle.TextColor3 = TEXT
+HdrTitle.TextXAlignment = Enum.TextXAlignment.Left
+HdrTitle.ZIndex = 12
+HdrTitle.Parent = Hdr
 
-local SubLbl = Instance.new("TextLabel")
-SubLbl.Size = UDim2.new(1,-60,0,16) SubLbl.Position = UDim2.new(0,16,0,34)
-SubLbl.BackgroundTransparency = 1 SubLbl.Text = CONFIG.SubTitle.."  •  RightShift para abrir/fechar"
-SubLbl.TextSize = 10 SubLbl.Font = Enum.Font.Gotham
-SubLbl.TextColor3 = CONFIG.MutedColor SubLbl.TextXAlignment = Enum.TextXAlignment.Left
-SubLbl.ZIndex = 12 SubLbl.Parent = Header
+local HdrSub = Instance.new("TextLabel")
+HdrSub.Size = UDim2.new(1, -50, 0, 14)
+HdrSub.Position = UDim2.new(0, 14, 0, 33)
+HdrSub.BackgroundTransparency = 1
+HdrSub.Text = "RightShift para abrir/fechar"
+HdrSub.TextSize = 10
+HdrSub.Font = Enum.Font.Gotham
+HdrSub.TextColor3 = MUTED
+HdrSub.TextXAlignment = Enum.TextXAlignment.Left
+HdrSub.ZIndex = 12
+HdrSub.Parent = Hdr
 
 local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0,26,0,26) CloseBtn.Position = UDim2.new(1,-36,0,14)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(180,50,50) CloseBtn.Text = "✕"
-CloseBtn.TextSize = 12 CloseBtn.Font = Enum.Font.GothamBold
-CloseBtn.TextColor3 = Color3.fromRGB(255,255,255) CloseBtn.ZIndex = 13 CloseBtn.Parent = Header
-corner(CloseBtn, 6)
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -34, 0, 13)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseBtn.Text = "✕"
+CloseBtn.TextSize = 11
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.ZIndex = 13
+CloseBtn.Parent = Hdr
+mkCorner(CloseBtn, 5)
 
-local Sep = Instance.new("Frame")
-Sep.Size = UDim2.new(1,-20,0,1) Sep.Position = UDim2.new(0,10,0,53)
-Sep.BackgroundColor3 = Color3.fromRGB(45,45,70) Sep.BorderSizePixel = 0 Sep.ZIndex = 11 Sep.Parent = Window
+local HdrLine = Instance.new("Frame")
+HdrLine.Size = UDim2.new(1, -20, 0, 1)
+HdrLine.Position = UDim2.new(0, 10, 0, 50)
+HdrLine.BackgroundColor3 = Color3.fromRGB(45, 45, 70)
+HdrLine.BorderSizePixel = 0
+HdrLine.ZIndex = 11
+HdrLine.Parent = Win
 
--- SIDEBAR
+-- ══════════════════════════════════════════
+--  SIDEBAR
+-- ══════════════════════════════════════════
 local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0,130,1,-60) Sidebar.Position = UDim2.new(0,0,0,58)
-Sidebar.BackgroundColor3 = Color3.fromRGB(18,18,28) Sidebar.BorderSizePixel = 0
-Sidebar.ZIndex = 11 Sidebar.Parent = Window
-corner(Sidebar, 8)
-local SideList = Instance.new("UIListLayout")
-SideList.Padding = UDim.new(0,4) SideList.HorizontalAlignment = Enum.HorizontalAlignment.Center SideList.Parent = Sidebar
+Sidebar.Size = UDim2.new(0, 120, 1, -56)
+Sidebar.Position = UDim2.new(0, 0, 0, 54)
+Sidebar.BackgroundColor3 = SIDE
+Sidebar.BorderSizePixel = 0
+Sidebar.ZIndex = 11
+Sidebar.Parent = Win
+mkCorner(Sidebar, 8)
+
+local SideLayout = Instance.new("UIListLayout")
+SideLayout.Padding = UDim.new(0, 3)
+SideLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SideLayout.Parent = Sidebar
+
 local SidePad = Instance.new("UIPadding")
-SidePad.PaddingTop = UDim.new(0,8) SidePad.PaddingLeft = UDim.new(0,6) SidePad.PaddingRight = UDim.new(0,6) SidePad.Parent = Sidebar
+SidePad.PaddingTop   = UDim.new(0, 8)
+SidePad.PaddingLeft  = UDim.new(0, 5)
+SidePad.PaddingRight = UDim.new(0, 5)
+SidePad.Parent = Sidebar
 
--- CONTENT AREA
-local ContentArea = Instance.new("Frame")
-ContentArea.Size = UDim2.new(1,-140,1,-62) ContentArea.Position = UDim2.new(0,138,0,60)
-ContentArea.BackgroundColor3 = CONFIG.PanelColor ContentArea.BorderSizePixel = 0
-ContentArea.ZIndex = 11 ContentArea.ClipsDescendants = true ContentArea.Parent = Window
-corner(ContentArea, 8)
+-- ══════════════════════════════════════════
+--  CONTENT
+-- ══════════════════════════════════════════
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -128, 1, -58)
+Content.Position = UDim2.new(0, 126, 0, 56)
+Content.BackgroundColor3 = PANEL
+Content.BorderSizePixel = 0
+Content.ZIndex = 11
+Content.ClipsDescendants = true
+Content.Parent = Win
+mkCorner(Content, 8)
 
--- NOTIFICAÇÕES
-local NotifHolder = Instance.new("Frame")
-NotifHolder.Size = UDim2.new(0,240,1,0) NotifHolder.Position = UDim2.new(1,-250,0,0)
-NotifHolder.BackgroundTransparency = 1 NotifHolder.ZIndex = 50 NotifHolder.Parent = ScreenGui
-local NotifLayout = Instance.new("UIListLayout")
-NotifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom NotifLayout.Padding = UDim.new(0,6) NotifLayout.Parent = NotifHolder
+-- ══════════════════════════════════════════
+--  NOTIFICAÇÕES
+-- ══════════════════════════════════════════
+local NHolder = Instance.new("Frame")
+NHolder.Size = UDim2.new(0, 230, 1, 0)
+NHolder.Position = UDim2.new(1, -238, 0, 0)
+NHolder.BackgroundTransparency = 1
+NHolder.ZIndex = 100
+NHolder.Parent = SG
 
-local function notify(title, msg, duration)
-    duration = duration or 3
-    local nf = Instance.new("Frame")
-    nf.Size = UDim2.new(1,0,0,0) nf.AutomaticSize = Enum.AutomaticSize.Y
-    nf.BackgroundColor3 = Color3.fromRGB(22,22,35) nf.BackgroundTransparency = 1
-    nf.BorderSizePixel = 0 nf.ZIndex = 51 nf.Parent = NotifHolder
-    corner(nf, 8) stroke(nf, CONFIG.AccentColor, 1)
+local NLayout = Instance.new("UIListLayout")
+NLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+NLayout.Padding = UDim.new(0, 5)
+NLayout.Parent = NHolder
+
+local function notify(title, msg, dur)
+    dur = dur or 3
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 54)
+    f.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+    f.BackgroundTransparency = 1
+    f.BorderSizePixel = 0
+    f.ZIndex = 101
+    f.Parent = NHolder
+    mkCorner(f, 7)
+    mkStroke(f, ACCENT, 1)
+
     local bar = Instance.new("Frame")
-    bar.Size = UDim2.new(0,3,1,0) bar.BackgroundColor3 = CONFIG.AccentColor
-    bar.BorderSizePixel = 0 bar.ZIndex = 52 bar.Parent = nf corner(bar,2)
-    local inner = Instance.new("Frame")
-    inner.Size = UDim2.new(1,-10,1,0) inner.Position = UDim2.new(0,8,0,0)
-    inner.BackgroundTransparency = 1 inner.AutomaticSize = Enum.AutomaticSize.Y inner.ZIndex = 52 inner.Parent = nf
-    local ipad = Instance.new("UIPadding") ipad.PaddingTop = UDim.new(0,8) ipad.PaddingBottom = UDim.new(0,8) ipad.Parent = inner
-    local t1 = Instance.new("TextLabel")
-    t1.Size = UDim2.new(1,0,0,16) t1.BackgroundTransparency = 1 t1.Text = title
-    t1.TextSize = 12 t1.Font = Enum.Font.GothamBold t1.TextColor3 = CONFIG.TextColor
-    t1.TextXAlignment = Enum.TextXAlignment.Left t1.ZIndex = 53 t1.Parent = inner
-    local t2 = Instance.new("TextLabel")
-    t2.Size = UDim2.new(1,0,0,14) t2.Position = UDim2.new(0,0,0,18) t2.BackgroundTransparency = 1 t2.Text = msg
-    t2.TextSize = 11 t2.Font = Enum.Font.Gotham t2.TextColor3 = CONFIG.MutedColor
-    t2.TextXAlignment = Enum.TextXAlignment.Left t2.ZIndex = 53 t2.Parent = inner
-    tween(nf, {BackgroundTransparency=0}, 0.2)
-    task.delay(duration, function() tween(nf,{BackgroundTransparency=1},0.3) task.wait(0.35) nf:Destroy() end)
+    bar.Size = UDim2.new(0, 3, 1, 0)
+    bar.BackgroundColor3 = ACCENT
+    bar.BorderSizePixel = 0
+    bar.ZIndex = 102
+    bar.Parent = f
+    mkCorner(bar, 2)
+
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.new(1, -16, 0, 20)
+    tl.Position = UDim2.new(0, 10, 0, 8)
+    tl.BackgroundTransparency = 1
+    tl.Text = title
+    tl.TextSize = 12
+    tl.Font = Enum.Font.GothamBold
+    tl.TextColor3 = TEXT
+    tl.TextXAlignment = Enum.TextXAlignment.Left
+    tl.ZIndex = 103
+    tl.Parent = f
+
+    local ml = Instance.new("TextLabel")
+    ml.Size = UDim2.new(1, -16, 0, 16)
+    ml.Position = UDim2.new(0, 10, 0, 30)
+    ml.BackgroundTransparency = 1
+    ml.Text = msg
+    ml.TextSize = 10
+    ml.Font = Enum.Font.Gotham
+    ml.TextColor3 = MUTED
+    ml.TextXAlignment = Enum.TextXAlignment.Left
+    ml.ZIndex = 103
+    ml.Parent = f
+
+    tw(f, {BackgroundTransparency = 0}, 0.2)
+    task.delay(dur, function()
+        tw(f, {BackgroundTransparency = 1}, 0.25)
+        task.wait(0.3)
+        f:Destroy()
+    end)
 end
 
--- API DO MENU
+-- ══════════════════════════════════════════
+--  TAB API
+-- ══════════════════════════════════════════
 local function switchTab(tab)
     if ActiveTab == tab then return end
     for _, t in ipairs(Tabs) do
         t.frame.Visible = false
-        tween(t.button, {BackgroundTransparency=1, TextColor3=CONFIG.MutedColor}, 0.15)
+        tw(t.btn, {BackgroundTransparency = 1, TextColor3 = MUTED}, 0.15)
     end
-    ActiveTab = tab tab.frame.Visible = true
-    tween(tab.button, {BackgroundTransparency=0.85, TextColor3=CONFIG.TextColor}, 0.15)
+    ActiveTab = tab
+    tab.frame.Visible = true
+    tw(tab.btn, {BackgroundTransparency = 0.8, TextColor3 = TEXT}, 0.15)
 end
 
-local function addTab(name)
+local function newTab(name)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1,0,0,34) btn.BackgroundColor3 = CONFIG.AccentColor
-    btn.BackgroundTransparency = 1 btn.Text = name btn.TextSize = 12
-    btn.Font = Enum.Font.GothamSemibold btn.TextColor3 = CONFIG.MutedColor
-    btn.TextXAlignment = Enum.TextXAlignment.Left btn.ZIndex = 12 btn.Parent = Sidebar
-    corner(btn, 6)
-    local bp = Instance.new("UIPadding") bp.PaddingLeft = UDim.new(0,10) bp.Parent = btn
+    btn.Size = UDim2.new(1, 0, 0, 32)
+    btn.BackgroundColor3 = ACCENT
+    btn.BackgroundTransparency = 1
+    btn.Text = name
+    btn.TextSize = 11
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextColor3 = MUTED
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.ZIndex = 12
+    btn.Parent = Sidebar
+    mkCorner(btn, 5)
+
+    local bp = Instance.new("UIPadding")
+    bp.PaddingLeft = UDim.new(0, 9)
+    bp.Parent = btn
+
     local frame = Instance.new("ScrollingFrame")
-    frame.Size = UDim2.new(1,0,1,0) frame.BackgroundTransparency = 1 frame.BorderSizePixel = 0
-    frame.ZIndex = 12 frame.Visible = false frame.ScrollBarThickness = 3
-    frame.ScrollBarImageColor3 = CONFIG.AccentColor frame.CanvasSize = UDim2.new(0,0,0,0)
-    frame.AutomaticCanvasSize = Enum.AutomaticSize.Y frame.Parent = ContentArea
-    local layout = Instance.new("UIListLayout") layout.Padding = UDim.new(0,6) layout.Parent = frame
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0,10) pad.PaddingLeft = UDim.new(0,10)
-    pad.PaddingRight = UDim.new(0,10) pad.PaddingBottom = UDim.new(0,10) pad.Parent = frame
-    local tabData = {name=name, button=btn, frame=frame}
-    table.insert(Tabs, tabData)
-    btn.MouseButton1Click:Connect(function() switchTab(tabData) end)
-    if #Tabs == 1 then switchTab(tabData) end
-    return tabData
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.ZIndex = 12
+    frame.Visible = false
+    frame.ScrollBarThickness = 3
+    frame.ScrollBarImageColor3 = ACCENT
+    frame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    frame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    frame.Parent = Content
+
+    local ll = Instance.new("UIListLayout")
+    ll.Padding = UDim.new(0, 5)
+    ll.Parent = frame
+
+    local pp = Instance.new("UIPadding")
+    pp.PaddingTop    = UDim.new(0, 8)
+    pp.PaddingLeft   = UDim.new(0, 8)
+    pp.PaddingRight  = UDim.new(0, 8)
+    pp.PaddingBottom = UDim.new(0, 8)
+    pp.Parent = frame
+
+    local t = {btn = btn, frame = frame}
+    table.insert(Tabs, t)
+    btn.MouseButton1Click:Connect(function() switchTab(t) end)
+    if #Tabs == 1 then switchTab(t) end
+    return t
 end
 
-local function addSection(tab, text)
-    local f = Instance.new("Frame") f.Size = UDim2.new(1,0,0,22) f.BackgroundTransparency = 1 f.ZIndex = 13 f.Parent = tab.frame
-    local l = Instance.new("TextLabel") l.Size = UDim2.new(1,0,1,0) l.BackgroundTransparency = 1
-    l.Text = "── "..text:upper().." ──" l.TextSize = 9 l.Font = Enum.Font.GothamBold
-    l.TextColor3 = CONFIG.AccentColor l.TextXAlignment = Enum.TextXAlignment.Left l.ZIndex = 14 l.Parent = f
+local function newSection(tab, text)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 20)
+    f.BackgroundTransparency = 1
+    f.ZIndex = 13
+    f.Parent = tab.frame
+
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, 0, 1, 0)
+    l.BackgroundTransparency = 1
+    l.Text = "── " .. string.upper(text) .. " ──"
+    l.TextSize = 9
+    l.Font = Enum.Font.GothamBold
+    l.TextColor3 = ACCENT
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.ZIndex = 14
+    l.Parent = f
 end
 
-local function addLabel(tab, text)
-    local f = Instance.new("Frame") f.Size = UDim2.new(1,0,0,32) f.BackgroundColor3 = Color3.fromRGB(20,20,32)
-    f.BorderSizePixel = 0 f.ZIndex = 13 f.Parent = tab.frame corner(f,6)
-    local l = Instance.new("TextLabel") l.Size = UDim2.new(1,-20,1,0) l.Position = UDim2.new(0,10,0,0)
-    l.BackgroundTransparency = 1 l.Text = text l.TextSize = 12 l.Font = Enum.Font.Gotham
-    l.TextColor3 = CONFIG.MutedColor l.TextXAlignment = Enum.TextXAlignment.Left l.ZIndex = 14 l.Parent = f
+local function newLabel(tab, text)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 28)
+    f.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    f.BorderSizePixel = 0
+    f.ZIndex = 13
+    f.Parent = tab.frame
+    mkCorner(f, 5)
+
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -16, 1, 0)
+    l.Position = UDim2.new(0, 8, 0, 0)
+    l.BackgroundTransparency = 1
+    l.Text = text
+    l.TextSize = 11
+    l.Font = Enum.Font.Gotham
+    l.TextColor3 = MUTED
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.ZIndex = 14
+    l.Parent = f
 end
 
-local function addToggle(tab, text, default, callback)
+local function newToggle(tab, text, default, cb)
     local state = default or false
-    local f = Instance.new("Frame") f.Size = UDim2.new(1,0,0,40) f.BackgroundColor3 = Color3.fromRGB(28,28,42)
-    f.BorderSizePixel = 0 f.ZIndex = 13 f.Parent = tab.frame corner(f,6)
-    local lbl = Instance.new("TextLabel") lbl.Size = UDim2.new(1,-60,1,0) lbl.Position = UDim2.new(0,12,0,0)
-    lbl.BackgroundTransparency = 1 lbl.Text = text lbl.TextSize = 13 lbl.Font = Enum.Font.Gotham
-    lbl.TextColor3 = CONFIG.TextColor lbl.TextXAlignment = Enum.TextXAlignment.Left lbl.ZIndex = 14 lbl.Parent = f
-    local track = Instance.new("Frame") track.Size = UDim2.new(0,40,0,20) track.Position = UDim2.new(1,-52,0.5,-10)
-    track.BackgroundColor3 = Color3.fromRGB(50,50,70) track.BorderSizePixel = 0 track.ZIndex = 14 track.Parent = f corner(track,10)
-    local knob = Instance.new("Frame") knob.Size = UDim2.new(0,14,0,14) knob.Position = UDim2.new(0,3,0.5,-7)
-    knob.BackgroundColor3 = Color3.fromRGB(160,160,190) knob.BorderSizePixel = 0 knob.ZIndex = 15 knob.Parent = track corner(knob,7)
+
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 38)
+    f.BackgroundColor3 = ITEM_BG
+    f.BorderSizePixel = 0
+    f.ZIndex = 13
+    f.Parent = tab.frame
+    mkCorner(f, 6)
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -58, 1, 0)
+    lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextSize = 12
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextColor3 = TEXT
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 14
+    lbl.Parent = f
+
+    local track = Instance.new("Frame")
+    track.Size = UDim2.new(0, 38, 0, 18)
+    track.Position = UDim2.new(1, -48, 0.5, -9)
+    track.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+    track.BorderSizePixel = 0
+    track.ZIndex = 14
+    track.Parent = f
+    mkCorner(track, 9)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 12, 0, 12)
+    knob.Position = UDim2.new(0, 3, 0.5, -6)
+    knob.BackgroundColor3 = Color3.fromRGB(150, 150, 180)
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 15
+    knob.Parent = track
+    mkCorner(knob, 6)
+
     local function refresh()
         if state then
-            tween(track,{BackgroundColor3=CONFIG.AccentColor},0.18)
-            tween(knob,{Position=UDim2.new(1,-17,0.5,-7),BackgroundColor3=Color3.fromRGB(255,255,255)},0.18)
+            tw(track, {BackgroundColor3 = ACCENT}, 0.15)
+            tw(knob, {Position = UDim2.new(1, -15, 0.5, -6), BackgroundColor3 = Color3.fromRGB(255,255,255)}, 0.15)
         else
-            tween(track,{BackgroundColor3=Color3.fromRGB(50,50,70)},0.18)
-            tween(knob,{Position=UDim2.new(0,3,0.5,-7),BackgroundColor3=Color3.fromRGB(160,160,190)},0.18)
+            tw(track, {BackgroundColor3 = Color3.fromRGB(50,50,70)}, 0.15)
+            tw(knob, {Position = UDim2.new(0, 3, 0.5, -6), BackgroundColor3 = Color3.fromRGB(150,150,180)}, 0.15)
         end
-        if callback then callback(state) end
+        if cb then pcall(cb, state) end
     end
     refresh()
-    local btn = Instance.new("TextButton") btn.Size = UDim2.new(1,0,1,0) btn.BackgroundTransparency = 1
-    btn.Text = "" btn.ZIndex = 16 btn.Parent = f
-    btn.MouseButton1Click:Connect(function() state = not state refresh() end)
-    return { get=function() return state end, set=function(v) state=v refresh() end }
+
+    local hit = Instance.new("TextButton")
+    hit.Size = UDim2.new(1, 0, 1, 0)
+    hit.BackgroundTransparency = 1
+    hit.Text = ""
+    hit.ZIndex = 16
+    hit.Parent = f
+    hit.MouseButton1Click:Connect(function()
+        state = not state
+        refresh()
+    end)
+
+    return {
+        get = function() return state end,
+        set = function(v) state = v refresh() end,
+    }
 end
 
-local function addSlider(tab, text, min, max, default, callback)
-    min, max = min or 0, max or 100
-    local value = math.clamp(default or min, min, max)
-    local f = Instance.new("Frame") f.Size = UDim2.new(1,0,0,54) f.BackgroundColor3 = Color3.fromRGB(28,28,42)
-    f.BorderSizePixel = 0 f.ZIndex = 13 f.Parent = tab.frame corner(f,6)
-    local tl = Instance.new("TextLabel") tl.Size = UDim2.new(0.7,0,0,24) tl.Position = UDim2.new(0,12,0,6)
-    tl.BackgroundTransparency = 1 tl.Text = text tl.TextSize = 13 tl.Font = Enum.Font.Gotham
-    tl.TextColor3 = CONFIG.TextColor tl.TextXAlignment = Enum.TextXAlignment.Left tl.ZIndex = 14 tl.Parent = f
-    local vl = Instance.new("TextLabel") vl.Size = UDim2.new(0.3,-12,0,24) vl.Position = UDim2.new(0.7,0,0,6)
-    vl.BackgroundTransparency = 1 vl.Text = tostring(value) vl.TextSize = 13 vl.Font = Enum.Font.GothamBold
-    vl.TextColor3 = CONFIG.AccentColor vl.TextXAlignment = Enum.TextXAlignment.Right vl.ZIndex = 14 vl.Parent = f
-    local track = Instance.new("Frame") track.Size = UDim2.new(1,-24,0,6) track.Position = UDim2.new(0,12,1,-16)
-    track.BackgroundColor3 = Color3.fromRGB(45,45,65) track.BorderSizePixel = 0 track.ZIndex = 14 track.Parent = f corner(track,3)
-    local fill = Instance.new("Frame") fill.Size = UDim2.new((value-min)/(max-min),0,1,0)
-    fill.BackgroundColor3 = CONFIG.AccentColor fill.BorderSizePixel = 0 fill.ZIndex = 15 fill.Parent = track corner(fill,3)
-    local knob = Instance.new("Frame") knob.Size = UDim2.new(0,14,0,14) knob.AnchorPoint = Vector2.new(0.5,0.5)
-    knob.Position = UDim2.new((value-min)/(max-min),0,0.5,0) knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    knob.BorderSizePixel = 0 knob.ZIndex = 16 knob.Parent = track corner(knob,7)
+local function newSlider(tab, text, min, max, default, cb)
+    min = min or 0; max = max or 100
+    local val = math.clamp(default or min, min, max)
+
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, 50)
+    f.BackgroundColor3 = ITEM_BG
+    f.BorderSizePixel = 0
+    f.ZIndex = 13
+    f.Parent = tab.frame
+    mkCorner(f, 6)
+
+    local tl = Instance.new("TextLabel")
+    tl.Size = UDim2.new(0.65, 0, 0, 22)
+    tl.Position = UDim2.new(0, 10, 0, 5)
+    tl.BackgroundTransparency = 1
+    tl.Text = text
+    tl.TextSize = 12
+    tl.Font = Enum.Font.Gotham
+    tl.TextColor3 = TEXT
+    tl.TextXAlignment = Enum.TextXAlignment.Left
+    tl.ZIndex = 14
+    tl.Parent = f
+
+    local vl = Instance.new("TextLabel")
+    vl.Size = UDim2.new(0.35, -10, 0, 22)
+    vl.Position = UDim2.new(0.65, 0, 0, 5)
+    vl.BackgroundTransparency = 1
+    vl.Text = tostring(val)
+    vl.TextSize = 12
+    vl.Font = Enum.Font.GothamBold
+    vl.TextColor3 = ACCENT
+    vl.TextXAlignment = Enum.TextXAlignment.Right
+    vl.ZIndex = 14
+    vl.Parent = f
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -20, 0, 5)
+    bar.Position = UDim2.new(0, 10, 1, -14)
+    bar.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    bar.BorderSizePixel = 0
+    bar.ZIndex = 14
+    bar.Parent = f
+    mkCorner(bar, 3)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((val-min)/(max-min), 0, 1, 0)
+    fill.BackgroundColor3 = ACCENT
+    fill.BorderSizePixel = 0
+    fill.ZIndex = 15
+    fill.Parent = bar
+    mkCorner(fill, 3)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 13, 0, 13)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new((val-min)/(max-min), 0, 0.5, 0)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.BorderSizePixel = 0
+    knob.ZIndex = 16
+    knob.Parent = bar
+    mkCorner(knob, 7)
+
     local dragging = false
-    local function updateSlider(x)
-        local pct = math.clamp((x-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
-        value = math.floor(min+pct*(max-min)+0.5)
-        fill.Size = UDim2.new(pct,0,1,0) knob.Position = UDim2.new(pct,0,0.5,0)
-        vl.Text = tostring(value) if callback then callback(value) end
+    local function upd(x)
+        local pct = math.clamp((x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        val = math.floor(min + pct * (max - min) + 0.5)
+        fill.Size = UDim2.new(pct, 0, 1, 0)
+        knob.Position = UDim2.new(pct, 0, 0.5, 0)
+        vl.Text = tostring(val)
+        if cb then pcall(cb, val) end
     end
-    local hitbox = Instance.new("TextButton") hitbox.Size = UDim2.new(1,0,0,26) hitbox.Position = UDim2.new(0,0,1,-20)
-    hitbox.BackgroundTransparency = 1 hitbox.Text = "" hitbox.ZIndex = 17 hitbox.Parent = f
-    hitbox.MouseButton1Down:Connect(function() dragging=true updateSlider(Mouse.X) end)
+
+    local hit = Instance.new("TextButton")
+    hit.Size = UDim2.new(1, 0, 0, 24)
+    hit.Position = UDim2.new(0, 0, 1, -18)
+    hit.BackgroundTransparency = 1
+    hit.Text = ""
+    hit.ZIndex = 17
+    hit.Parent = f
+    hit.MouseButton1Down:Connect(function() dragging = true upd(Mouse.X) end)
     UserInputService.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType==Enum.UserInputType.MouseMovement then updateSlider(Mouse.X) end
+        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then upd(Mouse.X) end
     end)
     UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end)
-    return { get=function() return value end }
+
+    return { get = function() return val end }
 end
 
-local function addButton(tab, text, callback)
-    local btn = Instance.new("TextButton") btn.Size = UDim2.new(1,0,0,38)
-    btn.BackgroundColor3 = Color3.fromRGB(35,32,60) btn.BorderSizePixel = 0
-    btn.Text = text btn.TextSize = 13 btn.Font = Enum.Font.GothamSemibold
-    btn.TextColor3 = CONFIG.TextColor btn.ZIndex = 13 btn.Parent = tab.frame
-    corner(btn,6) stroke(btn, CONFIG.AccentColor, 1)
-    btn.MouseEnter:Connect(function() tween(btn,{BackgroundColor3=Color3.fromRGB(55,45,90)},0.1) end)
-    btn.MouseLeave:Connect(function() tween(btn,{BackgroundColor3=Color3.fromRGB(35,32,60)},0.1) end)
-    btn.MouseButton1Click:Connect(function() if callback then callback() end end)
+local function newButton(tab, text, cb)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.BackgroundColor3 = Color3.fromRGB(32, 28, 55)
+    btn.BorderSizePixel = 0
+    btn.Text = text
+    btn.TextSize = 12
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextColor3 = TEXT
+    btn.ZIndex = 13
+    btn.Parent = tab.frame
+    mkCorner(btn, 6)
+    mkStroke(btn, ACCENT, 1)
+
+    btn.MouseEnter:Connect(function() tw(btn, {BackgroundColor3 = Color3.fromRGB(50, 40, 85)}, 0.1) end)
+    btn.MouseLeave:Connect(function() tw(btn, {BackgroundColor3 = Color3.fromRGB(32, 28, 55)}, 0.1) end)
+    btn.MouseButton1Click:Connect(function() if cb then pcall(cb) end end)
 end
 
--- ABRIR / FECHAR
+-- ══════════════════════════════════════════
+--  TOGGLE MENU
+-- ══════════════════════════════════════════
 local function toggleMenu()
     MenuOpen = not MenuOpen
     if MenuOpen then
-        Window.Visible = true Window.GroupTransparency = 1
-        tween(Window,{GroupTransparency=0},0.22)
+        Win.Visible = true
+        Win.GroupTransparency = 1
+        tw(Win, {GroupTransparency = 0}, 0.2)
     else
-        tween(Window,{GroupTransparency=1},0.18)
-        task.delay(0.2, function() Window.Visible = false end)
+        tw(Win, {GroupTransparency = 1}, 0.15)
+        task.delay(0.18, function() Win.Visible = false end)
     end
 end
-UserInputService.InputBegan:Connect(function(inp,gpe)
-    if not gpe and inp.KeyCode==CONFIG.ToggleKey then toggleMenu() end
+
+UserInputService.InputBegan:Connect(function(i, gpe)
+    if not gpe and i.KeyCode == Enum.KeyCode.RightShift then toggleMenu() end
 end)
 CloseBtn.MouseButton1Click:Connect(toggleMenu)
 
--- HELPERS
+-- ══════════════════════════════════════════
+--  PLAYER HELPERS
+-- ══════════════════════════════════════════
 local function getChar() return LocalPlayer.Character end
 local function getHum()  return getChar() and getChar():FindFirstChildOfClass("Humanoid") end
 local function getHRP()  return getChar() and getChar():FindFirstChild("HumanoidRootPart") end
-local function isPlayerCharacter(model)
+
+local function isPlayer(model)
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Character == model then return true end
     end
@@ -310,56 +580,120 @@ local function isPlayerCharacter(model)
 end
 
 -- ══════════════════════════════════════════
+--  INSTAKILL — CORRIGIDO
+--  Não usa Destroy() no HRP para evitar NPC invisível
+--  Em vez disso força Health=0 em loop contínuo
+--  e desativa todos os scripts de regen
+-- ══════════════════════════════════════════
+local ikRange  = 15
+local ikActive = false
+
+local function killNPC(model)
+    if not model or not model.Parent then return end
+    if isPlayer(model) then return end
+
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if hum.Health <= 0 then return end
+
+    -- Desativa scripts de regen/heal antes de tudo
+    for _, s in ipairs(model:GetDescendants()) do
+        if (s:IsA("Script") or s:IsA("LocalScript")) then
+            pcall(function() s.Disabled = true end)
+        end
+    end
+
+    -- Força morte pelo Humanoid sem destruir partes
+    -- (evita o bug do NPC invisível)
+    pcall(function()
+        hum.MaxHealth = 0
+        hum.Health    = 0
+    end)
+
+    -- Fallback: tenta via TakeDamage com valor absurdo
+    pcall(function()
+        hum:TakeDamage(math.huge)
+    end)
+end
+
+local function ikLoop()
+    while ikActive do
+        local myHRP = getHRP()
+        if myHRP then
+            local params = OverlapParams.new()
+            params.FilterType = Enum.RaycastFilterType.Exclude
+            local parts = workspace:GetPartBoundsInRadius(myHRP.Position, ikRange, params)
+            local seen = {}
+            for _, part in ipairs(parts) do
+                local model = part:FindFirstAncestorOfClass("Model")
+                if model and not seen[model] then
+                    seen[model] = true
+                    pcall(killNPC, model)
+                end
+            end
+        end
+        task.wait(0.08)
+    end
+end
+
+-- ══════════════════════════════════════════
 --  TAB: MOVIMENTO
 -- ══════════════════════════════════════════
-local tabMov = addTab("🏃 Movimento")
+local tMov = newTab("🏃 Movimento")
 local speedVal = 16
 local jumpVal  = 50
 
-addSection(tabMov, "Velocidade")
-local speedToggle = addToggle(tabMov, "Speed Hack", false, function(on)
-    local hum = getHum()
-    if hum then hum.WalkSpeed = on and speedVal or 16 end
-    notify("Speed Hack", on and "Ativo — "..speedVal.." studs/s" or "Desativado")
+newSection(tMov, "Velocidade")
+
+local speedTog = newToggle(tMov, "Speed Hack", false, function(on)
+    local h = getHum()
+    if h then h.WalkSpeed = on and speedVal or 16 end
+    notify("Speed Hack", on and "Ativo — " .. speedVal .. " studs/s" or "Desativado")
 end)
-addSlider(tabMov, "Velocidade (studs/s)", 16, 250, 16, function(v)
+
+newSlider(tMov, "Velocidade (studs/s)", 16, 250, 16, function(v)
     speedVal = v
-    if speedToggle.get() then local h=getHum() if h then h.WalkSpeed=v end end
+    if speedTog.get() then local h = getHum() if h then h.WalkSpeed = v end end
 end)
 
-addSection(tabMov, "Salto")
-local jumpToggle = addToggle(tabMov, "High Jump", false, function(on)
-    local hum = getHum()
-    if hum then hum.JumpPower = on and jumpVal or 50 end
-    notify("High Jump", on and "Ativo — "..jumpVal or "Desativado")
+newSection(tMov, "Salto")
+
+local jumpTog = newToggle(tMov, "High Jump", false, function(on)
+    local h = getHum()
+    if h then h.JumpPower = on and jumpVal or 50 end
+    notify("High Jump", on and "Ativo — " .. jumpVal or "Desativado")
 end)
-addSlider(tabMov, "Força do Salto", 50, 500, 50, function(v)
+
+newSlider(tMov, "Força do Salto", 50, 500, 50, function(v)
     jumpVal = v
-    if jumpToggle.get() then local h=getHum() if h then h.JumpPower=v end end
+    if jumpTog.get() then local h = getHum() if h then h.JumpPower = v end end
 end)
 
-addSection(tabMov, "Extras")
-local noclipConn
-addToggle(tabMov, "No Clip", false, function(on)
+newSection(tMov, "Extras")
+
+local ncConn
+newToggle(tMov, "No Clip", false, function(on)
     if on then
-        noclipConn = RunService.Stepped:Connect(function()
-            if not getChar() then return end
-            for _, p in ipairs(getChar():GetDescendants()) do
+        ncConn = RunService.Stepped:Connect(function()
+            local c = getChar()
+            if not c then return end
+            for _, p in ipairs(c:GetDescendants()) do
                 if p:IsA("BasePart") then p.CanCollide = false end
             end
         end)
-        notify("No Clip", "Ativo — atravessa paredes")
+        notify("No Clip", "Ativo")
     else
-        if noclipConn then noclipConn:Disconnect() noclipConn=nil end
+        if ncConn then ncConn:Disconnect() ncConn = nil end
         notify("No Clip", "Desativado")
     end
 end)
-addButton(tabMov, "⬛ Teleportar ao Spawn", function()
-    local spawn = workspace:FindFirstChildOfClass("SpawnLocation")
+
+newButton(tMov, "🏠 Teleportar ao Spawn", function()
+    local sp = workspace:FindFirstChildOfClass("SpawnLocation")
     local hrp = getHRP()
-    if hrp and spawn then
-        hrp.CFrame = spawn.CFrame + Vector3.new(0,4,0)
-        notify("Teleporte", "Teleportado ao spawn!")
+    if hrp and sp then
+        hrp.CFrame = sp.CFrame + Vector3.new(0, 4, 0)
+        notify("Teleporte", "Teleportado!")
     else
         notify("Teleporte", "Spawn não encontrado")
     end
@@ -368,139 +702,110 @@ end)
 -- ══════════════════════════════════════════
 --  TAB: COMBATE
 -- ══════════════════════════════════════════
-local tabCom = addTab("⚔️ Combate")
-local ikRange  = 15
-local ikActive = false
-local godConn  = nil
+local tCom = newTab("⚔️ Combate")
+local godConn
 
--- INSTAKILL MELHORADO — funciona em qualquer NPC incluindo bosses
-local function killNPC(model)
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return end
+newSection(tCom, "Instakill")
+newLabel(tCom, "⚠️  Só afeta NPCs/mobs — nunca jogadores")
 
-    -- 1) Desativa TODOS os scripts do modelo (regen, heal, boss AI, etc.)
-    for _, obj in ipairs(model:GetDescendants()) do
-        if obj:IsA("Script") or obj:IsA("LocalScript") then
-            pcall(function() obj.Disabled = true end)
-        end
-    end
-
-    -- 2) Zera MaxHealth e Health (impede regen)
-    pcall(function() hum.MaxHealth = 0 end)
-    pcall(function() hum.Health = 0 end)
-
-    -- 3) Força estado de morte
-    pcall(function() hum:ChangeState(Enum.HumanoidStateType.Dead) end)
-
-    -- 4) Destroi o HumanoidRootPart — mata QUALQUER NPC garantido
-    local hrp = model:FindFirstChild("HumanoidRootPart")
-    if hrp then pcall(function() hrp:Destroy() end) end
-end
-
-local function killNearbyNPCs()
-    local myHRP = getHRP()
-    if not myHRP then return end
-
-    local overlapParams = OverlapParams.new()
-    overlapParams.FilterType = Enum.RaycastFilterType.Exclude
-
-    local parts = workspace:GetPartBoundsInRadius(myHRP.Position, ikRange, overlapParams)
-    local checked = {}
-
-    for _, part in ipairs(parts) do
-        local model = part:FindFirstAncestorOfClass("Model")
-        if model and not checked[model] then
-            checked[model] = true
-            if not isPlayerCharacter(model) then
-                pcall(killNPC, model)
-            end
-        end
-    end
-end
-
-addSection(tabCom, "Instakill NPCs & Bosses")
-addLabel(tabCom, "⚠️  Funciona em qualquer NPC, boss, mob")
-
-addToggle(tabCom, "Instakill NPCs & Bosses", false, function(on)
+newToggle(tCom, "Instakill NPCs & Bosses", false, function(on)
     ikActive = on
     if on then
-        task.spawn(function()
-            while ikActive do
-                pcall(killNearbyNPCs)
-                task.wait(0.1)
-            end
-        end)
-        notify("Instakill", "Ativo  •  Raio: "..ikRange.." studs")
+        task.spawn(ikLoop)
+        notify("Instakill", "Ativo  •  Raio: " .. ikRange .. " studs")
     else
         notify("Instakill", "Desativado")
     end
 end)
 
-addSlider(tabCom, "Raio de Instakill (studs)", 5, 80, 15, function(v)
+newSlider(tCom, "Raio (studs)", 5, 100, 15, function(v)
     ikRange = v
 end)
 
-addSection(tabCom, "Sobrevivência")
-addToggle(tabCom, "God Mode (HP infinito)", false, function(on)
+newSection(tCom, "Sobrevivência")
+
+newToggle(tCom, "God Mode", false, function(on)
     if on then
         godConn = RunService.Heartbeat:Connect(function()
-            local h = getHum() if h then h.Health = h.MaxHealth end
+            local h = getHum()
+            if h then h.Health = h.MaxHealth end
         end)
-        notify("God Mode", "Ativo — vida sempre cheia")
+        notify("God Mode", "Ativo")
     else
-        if godConn then godConn:Disconnect() godConn=nil end
+        if godConn then godConn:Disconnect() godConn = nil end
         notify("God Mode", "Desativado")
     end
 end)
-addButton(tabCom, "💊 Recuperar HP", function()
+
+newButton(tCom, "💊 Recuperar HP", function()
     local h = getHum()
-    if h then h.Health=h.MaxHealth notify("HP", "Vida recuperada!") end
+    if h then h.Health = h.MaxHealth notify("HP", "Vida recuperada!") end
 end)
 
 -- ══════════════════════════════════════════
 --  TAB: VISUAL
 -- ══════════════════════════════════════════
-local tabVis = addTab("👁️ Visual")
+local tVis = newTab("👁️ Visual")
 local espConns = {}
 
-addSection(tabVis, "ESP — NPCs & Bosses")
-addToggle(tabVis, "ESP NPCs (nomes)", false, function(on)
-    for _, c in ipairs(espConns) do c:Disconnect() end espConns = {}
+newSection(tVis, "ESP")
+
+newToggle(tVis, "ESP NPCs & Bosses", false, function(on)
+    for _, c in ipairs(espConns) do c:Disconnect() end
+    espConns = {}
+
     if on then
         local function applyESP(model)
             if not model:IsA("Model") then return end
             if not model:FindFirstChildOfClass("Humanoid") then return end
-            if isPlayerCharacter(model) then return end
+            if isPlayer(model) then return end
             local hrp = model:FindFirstChild("HumanoidRootPart")
-            if not hrp or hrp:FindFirstChild("ESP_Tag") then return end
+            if not hrp or hrp:FindFirstChild("_ESP") then return end
+
             local hum = model:FindFirstChildOfClass("Humanoid")
-            local isBoss = hum and hum.MaxHealth >= 500
+            local boss = hum and hum.MaxHealth >= 500
+
             local bb = Instance.new("BillboardGui")
-            bb.Name = "ESP_Tag" bb.Size = UDim2.new(0,120,0,34)
-            bb.StudsOffset = Vector3.new(0,3,0) bb.AlwaysOnTop = true bb.Parent = hrp
-            local tl = Instance.new("TextLabel") tl.Size = UDim2.new(1,0,1,0)
-            tl.BackgroundTransparency = 1 tl.Text = (isBoss and "👑 BOSS  " or "⚠ ")..model.Name
-            tl.TextSize = isBoss and 14 or 12 tl.Font = Enum.Font.GothamBold
-            tl.TextColor3 = isBoss and Color3.fromRGB(255,200,0) or Color3.fromRGB(255,80,80)
-            tl.TextStrokeTransparency = 0 tl.Parent = bb
+            bb.Name = "_ESP"
+            bb.Size = UDim2.new(0, 120, 0, 30)
+            bb.StudsOffset = Vector3.new(0, 3.5, 0)
+            bb.AlwaysOnTop = true
+            bb.Parent = hrp
+
+            local tl = Instance.new("TextLabel")
+            tl.Size = UDim2.new(1, 0, 1, 0)
+            tl.BackgroundTransparency = 1
+            tl.Text = (boss and "👑 " or "⚠ ") .. model.Name
+            tl.TextSize = boss and 13 or 11
+            tl.Font = Enum.Font.GothamBold
+            tl.TextColor3 = boss and Color3.fromRGB(255,200,0) or Color3.fromRGB(255,70,70)
+            tl.TextStrokeTransparency = 0
+            tl.Parent = bb
         end
-        for _, obj in ipairs(workspace:GetDescendants()) do applyESP(obj) end
-        local c = workspace.DescendantAdded:Connect(function(d) task.wait() applyESP(d) end)
+
+        for _, d in ipairs(workspace:GetDescendants()) do pcall(applyESP, d) end
+        local c = workspace.DescendantAdded:Connect(function(d)
+            task.wait(0.1)
+            pcall(applyESP, d)
+        end)
         table.insert(espConns, c)
-        notify("ESP", "Ativo — Bosses amarelo 👑, NPCs vermelho ⚠")
+        notify("ESP", "Ativo")
     else
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            local tag = obj:FindFirstChild("ESP_Tag") if tag then tag:Destroy() end
+        for _, d in ipairs(workspace:GetDescendants()) do
+            local e = d:FindFirstChild("_ESP")
+            if e then e:Destroy() end
         end
         notify("ESP", "Desativado")
     end
 end)
 
-addSection(tabVis, "Câmera")
-addSlider(tabVis, "Field of View (FOV)", 70, 120, 70, function(v)
+newSection(tVis, "Câmera")
+
+newSlider(tVis, "FOV", 70, 120, 70, function(v)
     workspace.CurrentCamera.FieldOfView = v
 end)
-addButton(tabVis, "↩️ Reset FOV", function()
+
+newButton(tVis, "↩️ Reset FOV", function()
     workspace.CurrentCamera.FieldOfView = 70
     notify("FOV", "Restaurado para 70°")
 end)
@@ -508,33 +813,43 @@ end)
 -- ══════════════════════════════════════════
 --  TAB: JOGADOR
 -- ══════════════════════════════════════════
-local tabPlr = addTab("👤 Jogador")
-addSection(tabPlr, "Info")
-addLabel(tabPlr, "👤 Utilizador: "..LocalPlayer.Name)
-addLabel(tabPlr, "🆔 UserID: "..LocalPlayer.UserId)
+local tPlr = newTab("👤 Jogador")
+
+newSection(tPlr, "Info")
+newLabel(tPlr, "👤 " .. LocalPlayer.Name)
+newLabel(tPlr, "🆔 " .. LocalPlayer.UserId)
 pcall(function()
-    local name = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
-    addLabel(tabPlr, "🎮 Jogo: "..name)
-end)
-addSection(tabPlr, "Ações")
-addButton(tabPlr, "🔄 Respawn", function()
-    local h = getHum() if h then h.Health=0 notify("Respawn","A renascer...") end
-end)
-addButton(tabPlr, "📋 Copiar UserID", function()
-    pcall(function() setclipboard(tostring(LocalPlayer.UserId)) end)
-    notify("Clipboard","UserID copiado: "..LocalPlayer.UserId)
+    local n = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
+    newLabel(tPlr, "🎮 " .. n)
 end)
 
--- MANTER CHEATS APÓS RESPAWN
+newSection(tPlr, "Ações")
+
+newButton(tPlr, "🔄 Respawn", function()
+    local h = getHum()
+    if h then h.Health = 0 notify("Respawn", "A renascer...") end
+end)
+
+newButton(tPlr, "📋 Copiar UserID", function()
+    pcall(function() setclipboard(tostring(LocalPlayer.UserId)) end)
+    notify("Copiado", tostring(LocalPlayer.UserId))
+end)
+
+-- ══════════════════════════════════════════
+--  MANTER APÓS RESPAWN
+-- ══════════════════════════════════════════
 LocalPlayer.CharacterAdded:Connect(function(char)
-    char:WaitForChild("Humanoid") task.wait(0.5)
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        if speedToggle.get() then hum.WalkSpeed = speedVal end
-        if jumpToggle.get()  then hum.JumpPower  = jumpVal  end
+    char:WaitForChild("Humanoid")
+    task.wait(0.5)
+    local h = char:FindFirstChildOfClass("Humanoid")
+    if h then
+        if speedTog.get() then h.WalkSpeed = speedVal end
+        if jumpTog.get()  then h.JumpPower  = jumpVal  end
     end
 end)
 
--- INICIAR
-notify("Menu Universal", "Carregado!  •  RightShift para abrir/fechar")
+-- ══════════════════════════════════════════
+--  ARRANCAR
+-- ══════════════════════════════════════════
+notify("Menu Universal", "Pronto!  RightShift para abrir")
 toggleMenu()
